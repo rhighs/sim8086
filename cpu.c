@@ -30,6 +30,13 @@ typedef int64_t i64;
 #define REG_SI 0x6
 #define REG_DI 0x7
 
+#define RM_DIRECT 0x6
+
+#define MOD_RM 0x0
+#define MOD_RM_OFF8 0x1
+#define MOD_RM_OFF16 0x2
+#define MOD_R2R 0x3
+
 #define IMOV 0b00100010
 
 void __print_bits(const u32 n) {
@@ -77,7 +84,7 @@ void instrcode_to_str(const u8 code, char *out) {
     strcpy(out, __out);
 }
 
-void decode(const u16 instr, char *out) {
+u8 decode(const u16 instr, const u16 opts, char *out) {
     const u8 OP  = (instr & 0b1111110000000000) >> 10;
     const u8 D   = (instr & 0b0000001000000000) >> 9;
     const u8 W   = (instr & 0b0000000100000000) >> 8;
@@ -85,25 +92,89 @@ void decode(const u16 instr, char *out) {
     const u8 REG = (instr & 0b0000000000111000) >> 3;
     const u8 RM  = (instr & 0b0000000000000111);
 
-    char op[10], reg[10], rm[10];
+    const char *ops[8] = {
+        "bx + si",
+        "bx + di",
+        "bp + si",
+        "bp + di",
+        "si",
+        "di",
+        "bp",
+        "bx",
+    };
 
+    u8 bytes_read = 0;
 
+    char op[32], reg[32], rm[32];
     instrcode_to_str(OP, op);
-    regcode_to_str(REG, W, reg);
-    regcode_to_str(RM, W, rm);
 
-#ifdef DEBUG
-    printf("\n");
-    printf("MOD:"); __print_bits(MOD);
-    printf("%s:", op); __print_bits(OP);
-    printf("%s:", reg); __print_bits(REG);
-    printf("%s:", rm); __print_bits(RM);
-    printf("\n");
-#endif
+    switch (MOD) {
+    case MOD_R2R: {
+        regcode_to_str(REG, W, reg);
+        regcode_to_str(RM, W, rm);
 
-    const char* source = D ? rm : reg;
-    const char* destination = D ? reg : rm;
-    sprintf(out, "%s %s, %s", op, destination, source);
+    #ifdef DEBUG
+        printf("\n");
+        printf("%s:", op); __print_bits(OP);
+        printf("D:"); __print_bits(D);
+        printf("W:"); __print_bits(W);
+        printf("MOD:"); __print_bits(MOD);
+        printf("%s:", reg); __print_bits(REG);
+        printf("%s:", rm); __print_bits(RM);
+        printf("\n");
+    #endif
+
+        const char* source = D ? rm : reg;
+        const char* destination = D ? reg : rm;
+        sprintf(out, "%s %s, %s", op, destination, source);
+        break;
+    }
+    
+    case MOD_RM: {
+        if (RM == RM_DIRECT) {
+            u16 wide = opts;
+            sprintf(rm, "[+%d]", wide);
+            bytes_read = 2;
+        } else {
+            sprintf(rm, "[%s]", ops[RM]);
+        }
+
+        regcode_to_str(REG, W, reg);
+
+        const char* source = D ? rm : reg;
+        const char* destination = D ? reg : rm;
+        sprintf(out, "%s %s, %s", op, destination, source);
+        break;
+    }
+
+    case MOD_RM_OFF8: {
+        const u8 byte = opts >> 8;
+        sprintf(rm, "[%s+%d]", ops[RM], byte);
+        bytes_read = 1;
+
+        regcode_to_str(REG, W, reg);
+
+        const char* source = D ? rm : reg;
+        const char* destination = D ? reg : rm;
+        sprintf(out, "%s %s, %s", op, destination, source);
+        break;
+    }
+
+    case MOD_RM_OFF16: {
+        const u16 wide = opts;
+        sprintf(rm, "[%s+%d]", ops[RM], wide);
+        bytes_read = 2;
+
+        regcode_to_str(REG, W, reg);
+
+        const char* source = D ? rm : reg;
+        const char* destination = D ? reg : rm;
+        sprintf(out, "%s %s, %s", op, destination, source);
+        break;
+    }
+    }
+
+    return bytes_read;
 }
 
 #define OUT_BUFSIZE 2048
@@ -144,7 +215,19 @@ int main(int argc, const char **argv) {
         u16 lo = (u16)(buf[i+1]);
         u16 instr_line = hi | lo;
 
-        decode(instr_line, line);
+        if (i < file_size - 2) {
+            u16 hi = (u16)(buf[i + 2]) << 8;
+            u16 lo = (u16)(buf[i + 3]);
+            u16 opts = hi | lo;
+            u8 nbytes_read = decode(instr_line, opts, line);
+            i += nbytes_read;
+        } else if (i < file_size - 1) {
+            u16 opts = buf[i + 2];
+            u8 nbytes_read = decode(instr_line, opts, line);
+        } else {
+            u8 _ = decode(instr_line, 0, line);
+        }
+
         strcat(line, "\n");
         strcat(out, line);
     }
