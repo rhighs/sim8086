@@ -41,6 +41,8 @@ typedef int64_t i64;
 #define IMOV_IMM2REGMEM 0b00110000
 #define IMOV_IMM2REG    0b00101100
 
+#define TEST_OP(OPCODE, AGAINST) ((OPCODE&AGAINST)==AGAINST)
+
 void __print_bits(const u32 n) {
     u8 len = sizeof(n) * 8;
     while (len--) {
@@ -110,21 +112,21 @@ u8 decode_mov(const u16 instr, const u16 opts, char *out) {
     char reg[32] = { 0 }, rm[32] = { 0 };
 
     // Case immediate to register mov
-    __print_bits(OP);
-    printf("%d %d\n", (IMOV_IMM2REG & OP) == IMOV_IMM2REG, OP, IMOV_IMM2REG);
-    if ((OP & IMOV_IMM2REG) == IMOV_IMM2REG) {
-        const u8 W   = (OP & 0b00001000) >> 3;
-        const u8 REG = OP & 0b00000111;
+    if (TEST_OP(OP, IMOV_IMM2REG)) {
+        const u8 W = (instr & 0b0000100000000000) >> 11;
+        const u8 REG = (instr & 0b000001110000000) >> 7;
         regcode_to_str(REG, W, reg);
 
-        u16 data = instr & 0b0000000011111111;
+        u16 data = 0;
         if (W) {
-            data = data | (opts & 0b1111111100000000);
+            data = (opts << 8) | (opts >> 8);
+            bytes_read = 1;
+        } else {
+            data = opts >> 8;
         }
-        bytes_read = 1;
-        sprintf(out, "mov %s, %d", reg, data);
-    } else {
 
+        sprintf(out, "mov %s, %d", reg, data);
+    } else if (TEST_OP(OP, IMOV)) {
         switch (MOD) {
         case MOD_R2R: {
             regcode_to_str(REG, W, reg);
@@ -155,7 +157,11 @@ u8 decode_mov(const u16 instr, const u16 opts, char *out) {
 
         case MOD_RM_OFF8: {
             const u8 byte = opts >> 8;
-            sprintf(rm, "[%s+%d]", ops[RM], byte);
+            if (byte == 0) {
+                sprintf(rm, "[%s]", ops[RM], byte);
+            } else {
+                sprintf(rm, "[%s+%d]", ops[RM], byte);
+            }
             bytes_read = 1;
 
             regcode_to_str(REG, W, reg);
@@ -186,9 +192,8 @@ u8 decode_mov(const u16 instr, const u16 opts, char *out) {
 
 u8 decode(const u16 instr, const u16 opts, char *out) {
     const u8 OP  = (instr & 0b1111110000000000) >> 10;
-
-    if ((OP & IMOV_IMM2REG) == IMOV_IMM2REG
-        || (OP & IMOV == IMOV)) {
+    if (TEST_OP(OP, IMOV_IMM2REG)
+        || TEST_OP(OP, IMOV)) {
         return decode_mov(instr, opts, out);
     }
 
@@ -246,6 +251,7 @@ int main(int argc, const char **argv) {
             u8 _ = decode(instr_line, 0, line);
         }
 
+        assert(strlen(line) != 0);
         strcat(line, "\n");
         strcat(out, line);
     }
