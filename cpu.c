@@ -114,18 +114,21 @@ u8 decode_mov(const u16 instr, const u16 opts, char *out) {
     // Case immediate to register mov
     if (TEST_OP(OP, IMOV_IMM2REG)) {
         const u8 W = (instr & 0b0000100000000000) >> 11;
-        const u8 REG = (instr & 0b000001110000000) >> 7;
+        const u8 REG = (instr & 0b0000011100000000) >> 8;
         regcode_to_str(REG, W, reg);
 
-        u16 data = 0;
-        if (W) {
-            data = (opts << 8) | (opts >> 8);
-            bytes_read = 1;
-        } else {
-            data = opts >> 8;
-        }
+        __print_bits(instr);
+        __print_bits(REG);
 
-        sprintf(out, "mov %s, %d", reg, data);
+        u8 data8   = instr & 0b0000000011111111;
+        u16 data16 = instr & 0b0000000011111111;
+        if (W) {
+            data16 = (opts & 0b1111111100000000) | data16;
+            bytes_read = 1;
+        }
+        __print_bits(data8);
+
+        sprintf(out, "mov %s, %d", reg, W ? data16 : data8);
     } else if (TEST_OP(OP, IMOV)) {
         switch (MOD) {
         case MOD_R2R: {
@@ -173,7 +176,7 @@ u8 decode_mov(const u16 instr, const u16 opts, char *out) {
         }
 
         case MOD_RM_OFF16: {
-            const u16 wide = opts;
+            const u16 wide = (opts >> 8) | (opts << 8);
             sprintf(rm, "[%s+%d]", ops[RM], wide);
             bytes_read = 2;
 
@@ -197,6 +200,7 @@ u8 decode(const u16 instr, const u16 opts, char *out) {
         return decode_mov(instr, opts, out);
     }
 
+    assert(0 && "No mov decode matched");
     return 0;
 }
 
