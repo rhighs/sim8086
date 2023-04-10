@@ -37,7 +37,9 @@ typedef int64_t i64;
 #define MOD_RM_OFF16 0x2
 #define MOD_R2R 0x3
 
-#define IMOV 0b00100010
+#define IMOV            0b00100010
+#define IMOV_IMM2REGMEM 0b00110000
+#define IMOV_IMM2REG    0b00101100
 
 void __print_bits(const u32 n) {
     u8 len = sizeof(n) * 8;
@@ -74,23 +76,24 @@ void regcode_to_str(const u8 code, const u8 w_bit, char *out) {
     strcpy(out, __out);
 }
 
-void instrcode_to_str(const u8 code, char *out) {
-    char *__out;
-    switch (code) {
-        case IMOV:
-            __out = "mov";
-            break;
-    }
-    strcpy(out, __out);
-}
-
-u8 decode(const u16 instr, const u16 opts, char *out) {
+u8 decode_mov(const u16 instr, const u16 opts, char *out) {
     const u8 OP  = (instr & 0b1111110000000000) >> 10;
     const u8 D   = (instr & 0b0000001000000000) >> 9;
     const u8 W   = (instr & 0b0000000100000000) >> 8;
     const u8 MOD = (instr & 0b0000000011000000) >> 6;
     const u8 REG = (instr & 0b0000000000111000) >> 3;
     const u8 RM  = (instr & 0b0000000000000111);
+
+    #ifdef DEBUG
+        printf("\n");
+        printf("OP:  "); __print_bits(OP);
+        printf("D:   "); __print_bits(D);
+        printf("W:   "); __print_bits(W);
+        printf("MOD: "); __print_bits(MOD);
+        printf("REG: "); __print_bits(REG);
+        printf("RM:  "); __print_bits(RM);
+        printf("\n");
+    #endif
 
     const char *ops[8] = {
         "bx + si",
@@ -104,77 +107,92 @@ u8 decode(const u16 instr, const u16 opts, char *out) {
     };
 
     u8 bytes_read = 0;
+    char reg[32] = { 0 }, rm[32] = { 0 };
 
-    char op[32], reg[32], rm[32];
-    instrcode_to_str(OP, op);
-
-    switch (MOD) {
-    case MOD_R2R: {
+    // Case immediate to register mov
+    __print_bits(OP);
+    printf("%d %d\n", (IMOV_IMM2REG & OP) == IMOV_IMM2REG, OP, IMOV_IMM2REG);
+    if ((OP & IMOV_IMM2REG) == IMOV_IMM2REG) {
+        const u8 W   = (OP & 0b00001000) >> 3;
+        const u8 REG = OP & 0b00000111;
         regcode_to_str(REG, W, reg);
-        regcode_to_str(RM, W, rm);
 
-    #ifdef DEBUG
-        printf("\n");
-        printf("%s:", op); __print_bits(OP);
-        printf("D:"); __print_bits(D);
-        printf("W:"); __print_bits(W);
-        printf("MOD:"); __print_bits(MOD);
-        printf("%s:", reg); __print_bits(REG);
-        printf("%s:", rm); __print_bits(RM);
-        printf("\n");
-    #endif
+        u16 data = instr & 0b0000000011111111;
+        if (W) {
+            data = data | (opts & 0b1111111100000000);
+        }
+        bytes_read = 1;
+        sprintf(out, "mov %s, %d", reg, data);
+    } else {
 
-        const char* source = D ? rm : reg;
-        const char* destination = D ? reg : rm;
-        sprintf(out, "%s %s, %s", op, destination, source);
-        break;
-    }
-    
-    case MOD_RM: {
-        if (RM == RM_DIRECT) {
-            u16 wide = opts;
-            sprintf(rm, "[+%d]", wide);
-            bytes_read = 2;
-        } else {
-            sprintf(rm, "[%s]", ops[RM]);
+        switch (MOD) {
+        case MOD_R2R: {
+            regcode_to_str(REG, W, reg);
+            regcode_to_str(RM, W, rm);
+
+            const char* source = D ? rm : reg;
+            const char* destination = D ? reg : rm;
+            sprintf(out, "mov %s, %s", destination, source);
+            break;
+        }
+        
+        case MOD_RM: {
+            if (RM == RM_DIRECT) {
+                u16 wide = opts;
+                sprintf(rm, "[+%d]", wide);
+                bytes_read = 2;
+            } else {
+                sprintf(rm, "[%s]", ops[RM]);
+            }
+
+            regcode_to_str(REG, W, reg);
+
+            const char* source = D ? rm : reg;
+            const char* destination = D ? reg : rm;
+            sprintf(out, "mov %s, %s", destination, source);
+            break;
         }
 
-        regcode_to_str(REG, W, reg);
+        case MOD_RM_OFF8: {
+            const u8 byte = opts >> 8;
+            sprintf(rm, "[%s+%d]", ops[RM], byte);
+            bytes_read = 1;
 
-        const char* source = D ? rm : reg;
-        const char* destination = D ? reg : rm;
-        sprintf(out, "%s %s, %s", op, destination, source);
-        break;
-    }
+            regcode_to_str(REG, W, reg);
 
-    case MOD_RM_OFF8: {
-        const u8 byte = opts >> 8;
-        sprintf(rm, "[%s+%d]", ops[RM], byte);
-        bytes_read = 1;
+            const char* source = D ? rm : reg;
+            const char* destination = D ? reg : rm;
+            sprintf(out, "mov %s, %s", destination, source);
+            break;
+        }
 
-        regcode_to_str(REG, W, reg);
+        case MOD_RM_OFF16: {
+            const u16 wide = opts;
+            sprintf(rm, "[%s+%d]", ops[RM], wide);
+            bytes_read = 2;
 
-        const char* source = D ? rm : reg;
-        const char* destination = D ? reg : rm;
-        sprintf(out, "%s %s, %s", op, destination, source);
-        break;
-    }
+            regcode_to_str(REG, W, reg);
 
-    case MOD_RM_OFF16: {
-        const u16 wide = opts;
-        sprintf(rm, "[%s+%d]", ops[RM], wide);
-        bytes_read = 2;
-
-        regcode_to_str(REG, W, reg);
-
-        const char* source = D ? rm : reg;
-        const char* destination = D ? reg : rm;
-        sprintf(out, "%s %s, %s", op, destination, source);
-        break;
-    }
+            const char* source = D ? rm : reg;
+            const char* destination = D ? reg : rm;
+            sprintf(out, "mov %s, %s", destination, source);
+            break;
+        }
+        }
     }
 
     return bytes_read;
+}
+
+u8 decode(const u16 instr, const u16 opts, char *out) {
+    const u8 OP  = (instr & 0b1111110000000000) >> 10;
+
+    if ((OP & IMOV_IMM2REG) == IMOV_IMM2REG
+        || (OP & IMOV == IMOV)) {
+        return decode_mov(instr, opts, out);
+    }
+
+    return 0;
 }
 
 #define OUT_BUFSIZE 2048
