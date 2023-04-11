@@ -39,7 +39,7 @@ typedef int64_t i64;
 
 #define IMOV            0b10001000
 #define IMOV_IMM2REG    0b10110000
-#define IMOV_IMM2REGMEM 0b11000011
+#define IMOV_IMM2REGMEM 0b11000110
 #define IMOV_MEM2ACC    0b10100000
 #define IMOV_ACC2MEM    0b10100010
 
@@ -129,15 +129,21 @@ u32 decode_mov(const u16 instr, const u32 ip, const u16 opts, char *out) {
         const u8 W        = (instr & 0b0000000100000000) >> 8;
         const u16 addr_lo = (instr & 0b0000000011111111);
         const u16 addr_hi = (opts  & 0b1111111100000000);
-        const u16 addr = add_hi | addr_lo;
-        ip += 1;
+        u16 addr = addr_lo;
+        if (W) {
+            addr = addr_hi | addr_lo;
+            ip += 1;
+        }
         sprintf(out, "mov ax, [%d]", addr);
     } else if (TEST_OP(INSTR_LO, IMOV_ACC2MEM)) {
         const u8 W        = (instr & 0b0000000100000000) >> 8;
         const u16 addr_lo = (instr & 0b0000000011111111);
         const u16 addr_hi = (opts  & 0b1111111100000000);
-        const u16 addr = add_hi | addr_lo;
-        ip += 1;
+        u16 addr = addr_lo;
+        if (W) {
+            addr = addr_hi | addr_lo;
+            ip += 1;
+        }
         sprintf(out, "mov [%d], ax", addr);
     } else if (TEST_OP(INSTR_LO, IMOV)) {
         const u8 D   = (instr & 0b0000001000000000) >> 9;
@@ -147,7 +153,7 @@ u32 decode_mov(const u16 instr, const u32 ip, const u16 opts, char *out) {
         const u8 RM  = (instr & 0b0000000000000111);
 #ifdef DEBUG
         printf("\n");
-        printf("INSTR_LO: "); __print_bits(INSTR_LO)
+        printf("INSTR_LO: "); __print_bits(INSTR_LO);
         printf("W:        "); __print_bits(W);
         printf("REG:      "); __print_bits(REG);
         printf("D:        "); __print_bits(D);
@@ -221,6 +227,11 @@ u32 decode_mov(const u16 instr, const u32 ip, const u16 opts, char *out) {
 
 u32 decode(const u16 instr, const u32 ip, const u16 opts, char *out) {
     const u8 INSTR_LO = (instr >> 8);
+
+#ifdef DEBUG
+    printf("[MOV_MATCH] INSTR_LO: "); __print_bits(INSTR_LO);
+#endif
+
     if (TEST_OP(INSTR_LO, IMOV_IMM2REG)
         || TEST_OP(INSTR_LO, IMOV)
         || TEST_OP(INSTR_LO, IMOV_ACC2MEM)
