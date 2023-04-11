@@ -41,6 +41,8 @@ typedef int64_t i64;
 #define IMOV_IMM2REGMEM 0b00110000
 #define IMOV_IMM2REG    0b00101100
 
+#define OUT_BUFSIZE 2048
+
 #define TEST_OP(OPCODE, AGAINST) ((OPCODE&AGAINST)==AGAINST)
 
 void __print_bits(const u32 n) {
@@ -78,7 +80,7 @@ void regcode_to_str(const u8 code, const u8 w_bit, char *out) {
     strcpy(out, __out);
 }
 
-u8 decode_mov(const u16 instr, const u16 opts, char *out) {
+u32  decode_mov(const u16 instr, const u32 ip, const u16 opts, char *out) {
     const u8 OP  = (instr & 0b1111110000000000) >> 10;
     const u8 D   = (instr & 0b0000001000000000) >> 9;
     const u8 W   = (instr & 0b0000000100000000) >> 8;
@@ -108,7 +110,7 @@ u8 decode_mov(const u16 instr, const u16 opts, char *out) {
         "bx",
     };
 
-    u8 bytes_read = 0;
+    u32 new_ip = ip;
     char reg[32] = { 0 }, rm[32] = { 0 };
 
     // Case immediate to register mov
@@ -124,7 +126,7 @@ u8 decode_mov(const u16 instr, const u16 opts, char *out) {
         u16 data16 = instr & 0b0000000011111111;
         if (W) {
             data16 = (opts & 0b1111111100000000) | data16;
-            bytes_read = 1;
+            new_ip += 1;
         }
         __print_bits(data8);
 
@@ -145,7 +147,7 @@ u8 decode_mov(const u16 instr, const u16 opts, char *out) {
             if (RM == RM_DIRECT) {
                 u16 wide = opts;
                 sprintf(rm, "[+%d]", wide);
-                bytes_read = 2;
+                new_ip += 2;
             } else {
                 sprintf(rm, "[%s]", ops[RM]);
             }
@@ -161,11 +163,11 @@ u8 decode_mov(const u16 instr, const u16 opts, char *out) {
         case MOD_RM_OFF8: {
             const u8 byte = opts >> 8;
             if (byte == 0) {
-                sprintf(rm, "[%s]", ops[RM], byte);
+                sprintf(rm, "[%s]", ops[RM]);
             } else {
                 sprintf(rm, "[%s+%d]", ops[RM], byte);
             }
-            bytes_read = 1;
+            new_ip += 1;
 
             regcode_to_str(REG, W, reg);
 
@@ -178,7 +180,7 @@ u8 decode_mov(const u16 instr, const u16 opts, char *out) {
         case MOD_RM_OFF16: {
             const u16 wide = (opts >> 8) | (opts << 8);
             sprintf(rm, "[%s+%d]", ops[RM], wide);
-            bytes_read = 2;
+            new_ip += 2;
 
             regcode_to_str(REG, W, reg);
 
@@ -190,21 +192,19 @@ u8 decode_mov(const u16 instr, const u16 opts, char *out) {
         }
     }
 
-    return bytes_read;
+    return new_ip;
 }
 
-u8 decode(const u16 instr, const u16 opts, char *out) {
+u32 decode(const u16 instr, const u32 ip, const u16 opts, char *out) {
     const u8 OP  = (instr & 0b1111110000000000) >> 10;
     if (TEST_OP(OP, IMOV_IMM2REG)
         || TEST_OP(OP, IMOV)) {
-        return decode_mov(instr, opts, out);
+        return decode_mov(instr, ip, opts, out);
     }
 
     assert(0 && "No mov decode matched");
-    return 0;
+    return -1;
 }
-
-#define OUT_BUFSIZE 2048
 
 int main(int argc, const char **argv) {
     if (argc < 2)  {
@@ -236,23 +236,22 @@ int main(int argc, const char **argv) {
     memset(out, 0, OUT_BUFSIZE);
     strcat(out, "bits 16\n\n");
 
-    for (u32 i=0; i<file_size; i+=2) {
+    for (u32 ip=0; ip<file_size; ip+=2) {
         char line[32];
-        u16 hi = (u16)(buf[i]) << 8;
-        u16 lo = (u16)(buf[i+1]);
+        u16 hi = (u16)(buf[ip]) << 8;
+        u16 lo = (u16)(buf[ip+1]);
         u16 instr_line = hi | lo;
 
-        if (i < file_size - 2) {
-            u16 hi = (u16)(buf[i + 2]) << 8;
-            u16 lo = (u16)(buf[i + 3]);
+        if (ip < file_size - 2) {
+            u16 hi = (u16)(buf[ip + 2]) << 8;
+            u16 lo = (u16)(buf[ip + 3]);
             u16 opts = hi | lo;
-            u8 nbytes_read = decode(instr_line, opts, line);
-            i += nbytes_read;
-        } else if (i < file_size - 1) {
-            u16 opts = buf[i + 2];
-            u8 nbytes_read = decode(instr_line, opts, line);
+            ip = decode(instr_line, ip, opts, line);
+        } else if (ip < file_size - 1) {
+            u16 opts = buf[ip + 2];
+            ip = decode(instr_line, ip, opts, line);
         } else {
-            u8 _ = decode(instr_line, 0, line);
+            ip = decode(instr_line, ip, 0, line);
         }
 
         assert(strlen(line) != 0);
@@ -260,7 +259,7 @@ int main(int argc, const char **argv) {
         strcat(out, line);
     }
 
-    fprintf(stdout, out);
+    fprintf(stdout, "%s", out);
     return 0;
 
 no_arg_error:
