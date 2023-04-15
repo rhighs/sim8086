@@ -175,7 +175,7 @@ u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
         printf("\n");
 #endif
 
-        i16 data = 0;
+        u16 data = 0;
         switch (MOD) {
         case MOD_RM: {
             data = W ? OPT_2 << 8 | OPT_1 : OPT_1;
@@ -183,15 +183,17 @@ u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
             break;
         }
         case MOD_RM_OFF8: {
-            u8 addr = OPT_1;
+            i8 addr = OPT_1;
             data = W ? OPT_3 << 8 | OPT_2 : OPT_2;
-            sprintf(rm, "%s + %d", ops[RM], addr);
+            char addr_sign = addr < 0 ? '-' : '+';
+            sprintf(rm, "%s %c %d", ops[RM], addr_sign, abs(addr));
             new_ip += 1; break;
         }
         case MOD_RM_OFF16: {
-            u16 addr = OPT_2 << 8 | OPT_1;
+            i16 addr = OPT_2 << 8 | OPT_1;
             data = W ? OPT_4 << 8 | OPT_3 : OPT_3;
-            sprintf(rm, "%s + %d", ops[RM], addr);
+            char addr_sign = addr < 0 ? '-' : '+';
+            sprintf(rm, "%s %c %d", ops[RM], addr_sign, abs(addr));
             new_ip += 2; break;
         }
         }
@@ -240,7 +242,7 @@ u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
                 u16 hi = (u16)(buf[ip + 2]) << 8;
                 u16 lo = (u16)(buf[ip + 3]);
                 u16 wide = hi | lo;
-                sprintf(rm, "[+%d]", wide);
+                sprintf(rm, "[%d]", wide);
                 new_ip += 2;
             } else {
                 sprintf(rm, "[%s]", ops[RM]);
@@ -259,8 +261,8 @@ u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
             if (byte == 0) {
                 sprintf(rm, "[%s]", ops[RM]);
             } else {
-                char *byte_sign = byte < 0 ? "-" : "+";
-                sprintf(rm, "[%s %s %d]", ops[RM], byte_sign, abs(byte));
+                char byte_sign = byte < 0 ? '-' : '+';
+                sprintf(rm, "[%s %c %d]", ops[RM], byte_sign, abs(byte));
             }
             new_ip += 1;
 
@@ -277,8 +279,8 @@ u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
             u16 lo = (u16)(buf[ip + 3]);
             u16 data = hi | lo;
             const i16 wide = (data >> 8) | (data << 8);
-            char *wide_sign = wide < 0 ? "-" : "+";
-            sprintf(rm, "[%s %s %d]", ops[RM], wide_sign, abs(wide));
+            char wide_sign = wide < 0 ? '-' : '+';
+            sprintf(rm, "[%s %c %d]", ops[RM], wide_sign, abs(wide));
             new_ip += 2;
 
             regcode_to_str(REG, W, reg);
