@@ -128,16 +128,6 @@ u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
 #endif
 
         sprintf(out, "mov %s, %d", reg, W ? data16 : data8);
-    } else if (TEST_OP(INSTR_LO, IMOV_MEM2ACC)) {
-        const u8 W        = (instr & 0b0000000100000000) >> 8;
-        const u16 addr_lo = (instr & 0b0000000011111111);
-        const u16 addr_hi = (u16)(buf[ip + 2] << 8);
-        u16 addr = addr_lo;
-        if (W) {
-            addr = addr_hi | addr_lo;
-            new_ip += 1;
-        }
-        sprintf(out, "mov ax, [%d]", addr);
     } else if (TEST_OP(INSTR_LO, IMOV_ACC2MEM)) {
         const u8 W        = (instr & 0b0000000100000000) >> 8;
         const u16 addr_lo = (instr & 0b0000000011111111);
@@ -148,6 +138,16 @@ u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
             new_ip += 1;
         }
         sprintf(out, "mov [%d], ax", addr);
+    } else if (TEST_OP(INSTR_LO, IMOV_MEM2ACC)) {
+        const u8 W        = (instr & 0b0000000100000000) >> 8;
+        const u16 addr_lo = (instr & 0b0000000011111111);
+        const u16 addr_hi = (u16)(buf[ip + 2] << 8);
+        u16 addr = addr_lo;
+        if (W) {
+            addr = addr_hi | addr_lo;
+            new_ip += 1;
+        }
+        sprintf(out, "mov ax, [%d]", addr);
     } else if (TEST_OP(INSTR_LO, IMOV_IMM2REGMEM)) {
         const u8 D   = (instr & 0b0000001000000000) >> 9; assert(D == 1);
         const u8 REG = (instr & 0b0000000000111000) >> 3; assert(REG == 0);
