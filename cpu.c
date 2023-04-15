@@ -93,7 +93,10 @@ const char *ops[8] = {
     "bx",
 };
 
-u32 decode_mov(const u16 instr, const u32 ip, const u16 opts, char *out) {
+u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
+    u16 hi = (u16)(buf[ip]) << 8;
+    u16 lo = (u16)(buf[ip+1]);
+    u16 instr = hi | lo;
     const u8 INSTR_LO = (instr >> 8);
 
     u32 new_ip = ip;
@@ -116,7 +119,7 @@ u32 decode_mov(const u16 instr, const u32 ip, const u16 opts, char *out) {
         u8 data8   = instr & 0b0000000011111111;
         u16 data16 = instr & 0b0000000011111111;
         if (W) {
-            data16 = (opts & 0b1111111100000000) | data16;
+            data16 = ((u16)(buf[ip + 2] << 8)) | data16;
             new_ip += 1;
         }
 
@@ -128,29 +131,88 @@ u32 decode_mov(const u16 instr, const u32 ip, const u16 opts, char *out) {
     } else if (TEST_OP(INSTR_LO, IMOV_MEM2ACC)) {
         const u8 W        = (instr & 0b0000000100000000) >> 8;
         const u16 addr_lo = (instr & 0b0000000011111111);
-        const u16 addr_hi = (opts  & 0b1111111100000000);
+        const u16 addr_hi = (u16)(buf[ip + 2] << 8);
         u16 addr = addr_lo;
         if (W) {
             addr = addr_hi | addr_lo;
-            ip += 1;
+            new_ip += 1;
         }
         sprintf(out, "mov ax, [%d]", addr);
     } else if (TEST_OP(INSTR_LO, IMOV_ACC2MEM)) {
         const u8 W        = (instr & 0b0000000100000000) >> 8;
         const u16 addr_lo = (instr & 0b0000000011111111);
-        const u16 addr_hi = (opts  & 0b1111111100000000);
         u16 addr = addr_lo;
         if (W) {
+            const u16 addr_hi = (u16)(buf[ip + 2] << 8);
             addr = addr_hi | addr_lo;
-            ip += 1;
+            new_ip += 1;
         }
         sprintf(out, "mov [%d], ax", addr);
+    } else if (TEST_OP(INSTR_LO, IMOV_IMM2REGMEM)) {
+        const u8 D   = (instr & 0b0000001000000000) >> 9; assert(D == 1);
+        const u8 REG = (instr & 0b0000000000111000) >> 3; assert(REG == 0);
+        const u8 W   = (instr & 0b0000000100000000) >> 8;
+        const u8 MOD = (instr & 0b0000000011000000) >> 6;
+        const u8 RM  = (instr & 0b0000000000000111);
+
+        const u16 OPT_1 = (u16)(buf[ip + 2]);
+        const u16 OPT_2 = (u16)(buf[ip + 3]);
+        const u16 OPT_3 = (u16)(buf[ip + 4]);
+        const u16 OPT_4 = (u16)(buf[ip + 5]);
+
+#ifdef DEBUG
+        printf("\n");
+        printf("INSTR_LO: "); __print_bits(INSTR_LO);
+        printf("W:        "); __print_bits(W);
+        printf("REG:      "); __print_bits(REG);
+        printf("D:        "); __print_bits(D);
+        printf("MOD:      "); __print_bits(MOD);
+        printf("RM:       "); __print_bits(RM);
+        printf("OPT_1:    "); __print_bits(OPT_1);
+        printf("OPT_2:    "); __print_bits(OPT_2);
+        printf("OPT_3:    "); __print_bits(OPT_3);
+        printf("OPT_4:    "); __print_bits(OPT_4);
+        printf("\n");
+#endif
+
+        i16 data = 0;
+        switch (MOD) {
+        case MOD_RM: {
+            data = W ? OPT_2 << 8 | OPT_1 : OPT_1;
+            sprintf(rm, "%s", ops[RM]);
+            break;
+        }
+        case MOD_RM_OFF8: {
+            u8 addr = OPT_1;
+            data = W ? OPT_3 << 8 | OPT_2 : OPT_2;
+            sprintf(rm, "%s + %d", ops[RM], addr);
+            new_ip += 1; break;
+        }
+        case MOD_RM_OFF16: {
+            u16 addr = OPT_2 << 8 | OPT_1;
+            data = W ? OPT_4 << 8 | OPT_3 : OPT_3;
+            sprintf(rm, "%s + %d", ops[RM], addr);
+            new_ip += 2; break;
+        }
+        }
+
+        if (W) {
+            // One more byte of data
+            new_ip += 1;
+        }
+        __print_bits(data);
+
+        sprintf(out, "mov [%s], %s %d", rm, W ? "word" : "byte", data);
+
+        // There's always at least one additinal byte for 8-bit [data]
+        new_ip += 1;
     } else if (TEST_OP(INSTR_LO, IMOV)) {
         const u8 D   = (instr & 0b0000001000000000) >> 9;
         const u8 W   = (instr & 0b0000000100000000) >> 8;
         const u8 MOD = (instr & 0b0000000011000000) >> 6;
         const u8 REG = (instr & 0b0000000000111000) >> 3;
         const u8 RM  = (instr & 0b0000000000000111);
+
 #ifdef DEBUG
         printf("\n");
         printf("INSTR_LO: "); __print_bits(INSTR_LO);
@@ -175,7 +237,9 @@ u32 decode_mov(const u16 instr, const u32 ip, const u16 opts, char *out) {
         
         case MOD_RM: {
             if (RM == RM_DIRECT) {
-                u16 wide = opts;
+                u16 hi = (u16)(buf[ip + 2]) << 8;
+                u16 lo = (u16)(buf[ip + 3]);
+                u16 wide = hi | lo;
                 sprintf(rm, "[+%d]", wide);
                 new_ip += 2;
             } else {
@@ -191,11 +255,12 @@ u32 decode_mov(const u16 instr, const u32 ip, const u16 opts, char *out) {
         }
 
         case MOD_RM_OFF8: {
-            const u8 byte = opts >> 8;
+            const i8 byte = (u16)(buf[ip + 2]);
             if (byte == 0) {
                 sprintf(rm, "[%s]", ops[RM]);
             } else {
-                sprintf(rm, "[%s + %d]", ops[RM], byte);
+                char *byte_sign = byte < 0 ? "-" : "+";
+                sprintf(rm, "[%s %s %d]", ops[RM], byte_sign, abs(byte));
             }
             new_ip += 1;
 
@@ -208,8 +273,12 @@ u32 decode_mov(const u16 instr, const u32 ip, const u16 opts, char *out) {
         }
 
         case MOD_RM_OFF16: {
-            const u16 wide = (opts >> 8) | (opts << 8);
-            sprintf(rm, "[%s + %d]", ops[RM], wide);
+            u16 hi = (u16)(buf[ip + 2]) << 8;
+            u16 lo = (u16)(buf[ip + 3]);
+            u16 data = hi | lo;
+            const i16 wide = (data >> 8) | (data << 8);
+            char *wide_sign = wide < 0 ? "-" : "+";
+            sprintf(rm, "[%s %s %d]", ops[RM], wide_sign, abs(wide));
             new_ip += 2;
 
             regcode_to_str(REG, W, reg);
@@ -225,7 +294,10 @@ u32 decode_mov(const u16 instr, const u32 ip, const u16 opts, char *out) {
     return new_ip;
 }
 
-u32 decode(const u16 instr, const u32 ip, const u16 opts, char *out) {
+u32 decode(const u8 *buf, const u32 ip, char *out) {
+    u16 hi = (u16)(buf[ip]) << 8;
+    u16 lo = (u16)(buf[ip+1]);
+    u16 instr = hi | lo;
     const u8 INSTR_LO = (instr >> 8);
 
 #ifdef DEBUG
@@ -237,7 +309,7 @@ u32 decode(const u16 instr, const u32 ip, const u16 opts, char *out) {
         || TEST_OP(INSTR_LO, IMOV_ACC2MEM)
         || TEST_OP(INSTR_LO, IMOV_MEM2ACC)
         || TEST_OP(INSTR_LO, IMOV_IMM2REGMEM)) {
-        return decode_mov(instr, ip, opts, out);
+        return decode_mov(buf, ip, out);
     }
 
     assert(0 && "No mov decode matched");
@@ -276,21 +348,8 @@ int main(int argc, const char **argv) {
 
     for (u32 ip=0; ip<file_size; ip+=2) {
         char line[32];
-        u16 hi = (u16)(buf[ip]) << 8;
-        u16 lo = (u16)(buf[ip+1]);
-        u16 instr_line = hi | lo;
 
-        if (ip < file_size - 2) {
-            u16 hi = (u16)(buf[ip + 2]) << 8;
-            u16 lo = (u16)(buf[ip + 3]);
-            u16 opts = hi | lo;
-            ip = decode(instr_line, ip, opts, line);
-        } else if (ip < file_size - 1) {
-            u16 opts = buf[ip + 2];
-            ip = decode(instr_line, ip, opts, line);
-        } else {
-            ip = decode(instr_line, ip, 0, line);
-        }
+        ip = decode(buf, ip, line);
 
         assert(strlen(line) != 0);
         strcat(line, "\n");
