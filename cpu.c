@@ -43,9 +43,55 @@ typedef int64_t i64;
 #define IMOV_MEM2ACC    0b10100000
 #define IMOV_ACC2MEM    0b10100010
 
+#define IADD            0b00000000
+#define IADD_IMM2ACC    0b10000000 // Must check bits 2-3-4 from 2nd byte
+#define IADD_IMM2REGMEM 0b00000100
+
+#define ISUB                 0b00101000
+#define ISUB_IMM_FROM_REGMEM 0b10000000 // Must check bits 2-3-4 from 2nd byte
+#define ISUB_IMM_FROM_ACC    0b00011100
+
 #define OUT_BUFSIZE 2048
 
-#define TEST_OP(OPCODE, AGAINST) ((OPCODE&AGAINST)==AGAINST)
+#define TEST_OP(OPCODE, AGAINST) ((OPCODE>>(8-opcode_len(AGAINST)))==(AGAINST>>(8-opcode_len(AGAINST))))
+u8 opcode_len(u8 opcode) {
+    u8 len = 0;
+    switch (opcode) {
+    case IMOV:            len=6; break;
+    case IMOV_IMM2REGMEM: len=7; break;
+    case IMOV_IMM2REG:    len=4; break;
+    case IMOV_MEM2ACC:    len=7; break;
+    case IMOV_ACC2MEM:    len=7; break;
+    case IADD:            len=6; break;
+    case IADD_IMM2ACC:    len=6; break;
+    case IADD_IMM2REGMEM: len=7; break;
+    }
+    return len;
+}
+
+/**
+ * Defines common parameters placements in opcodes such as mov, sub, add
+ * (all of which share the same memory patterns)
+ */
+typedef enum {
+    OPV_BASE,
+    OPV_IMM2REG,
+    OPV_IMM2REGMEM,
+    OPV_MEM2ACC,
+    OPV_ACC2MEM,
+} op_variants_t;
+
+inline
+const char* opv_str(op_variants_t opv) {
+    switch (opv) {
+    case OPV_BASE: return "OPV_BASE";
+    case OPV_IMM2REG: return "OPV_IMM2REG";
+    case OPV_IMM2REGMEM: return "OPV_IMM2REGMEM";
+    case OPV_MEM2ACC: return "OPV_ACC2MEM";
+    case OPV_ACC2MEM: return "ACC2MEM";
+    }
+    return "";
+}
 
 void __print_bits(const u32 n) {
     u8 len = sizeof(n) * 8;
@@ -93,7 +139,8 @@ const char *ops[8] = {
     "bx",
 };
 
-u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
+u32 decode_params(const u8 *buf, const u32 ip,
+        op_variants_t variant, char *out) {
     u16 hi = (u16)(buf[ip]) << 8;
     u16 lo = (u16)(buf[ip+1]);
     u16 instr = hi | lo;
@@ -102,8 +149,7 @@ u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
     u32 new_ip = ip;
     char reg[32] = { 0 }, rm[32] = { 0 };
 
-    // Case immediate to register mov
-    if (TEST_OP(INSTR_LO, IMOV_IMM2REG)) {
+    if (variant == OPV_IMM2REG) {
         const u8 W = (instr & 0b0000100000000000) >> 11;
         const u8 REG = (instr & 0b0000011100000000) >> 8;
         regcode_to_str(REG, W, reg);
@@ -126,9 +172,8 @@ u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
 #ifdef DEBUG
        printf("DATA-8: "); __print_bits(data8);
 #endif
-
-        sprintf(out, "mov %s, %d", reg, W ? data16 : data8);
-    } else if (TEST_OP(INSTR_LO, IMOV_ACC2MEM)) {
+       sprintf(out, "%s, %d", reg, W ? data16 : data8);
+    } else if (variant == OPV_ACC2MEM) {
         const u8 W        = (instr & 0b0000000100000000) >> 8;
         const u16 addr_lo = (instr & 0b0000000011111111);
         u16 addr = addr_lo;
@@ -137,8 +182,8 @@ u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
             addr = addr_hi | addr_lo;
             new_ip += 1;
         }
-        sprintf(out, "mov [%d], ax", addr);
-    } else if (TEST_OP(INSTR_LO, IMOV_MEM2ACC)) {
+        sprintf(out, "[%d], ax", addr);
+    } else if (variant == OPV_MEM2ACC) {
         const u8 W        = (instr & 0b0000000100000000) >> 8;
         const u16 addr_lo = (instr & 0b0000000011111111);
         const u16 addr_hi = (u16)(buf[ip + 2] << 8);
@@ -147,8 +192,8 @@ u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
             addr = addr_hi | addr_lo;
             new_ip += 1;
         }
-        sprintf(out, "mov ax, [%d]", addr);
-    } else if (TEST_OP(INSTR_LO, IMOV_IMM2REGMEM)) {
+        sprintf(out, "ax, [%d]", addr);
+    } else if (variant == OPV_IMM2REGMEM) {
         const u8 D   = (instr & 0b0000001000000000) >> 9; assert(D == 1);
         const u8 REG = (instr & 0b0000000000111000) >> 3; assert(REG == 0);
         const u8 W   = (instr & 0b0000000100000000) >> 8;
@@ -204,11 +249,11 @@ u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
         }
         __print_bits(data);
 
-        sprintf(out, "mov [%s], %s %d", rm, W ? "word" : "byte", data);
+        sprintf(out, "[%s], %s %d", rm, W ? "word" : "byte", data);
 
         // There's always at least one additinal byte for 8-bit [data]
         new_ip += 1;
-    } else if (TEST_OP(INSTR_LO, IMOV)) {
+    } else if (variant == OPV_BASE) {
         const u8 D   = (instr & 0b0000001000000000) >> 9;
         const u8 W   = (instr & 0b0000000100000000) >> 8;
         const u8 MOD = (instr & 0b0000000011000000) >> 6;
@@ -233,7 +278,7 @@ u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
 
             const char* source = D ? rm : reg;
             const char* destination = D ? reg : rm;
-            sprintf(out, "mov %s, %s", destination, source);
+            sprintf(out, "%s, %s", destination, source);
             break;
         }
         
@@ -252,7 +297,7 @@ u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
 
             const char* source = D ? rm : reg;
             const char* destination = D ? reg : rm;
-            sprintf(out, "mov %s, %s", destination, source);
+            sprintf(out, "%s, %s", destination, source);
             break;
         }
 
@@ -270,7 +315,7 @@ u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
 
             const char* source = D ? rm : reg;
             const char* destination = D ? reg : rm;
-            sprintf(out, "mov %s, %s", destination, source);
+            sprintf(out, "%s, %s", destination, source);
             break;
         }
 
@@ -287,10 +332,11 @@ u32 decode_mov(const u8 *buf, const u32 ip, char *out) {
 
             const char* source = D ? rm : reg;
             const char* destination = D ? reg : rm;
-            sprintf(out, "mov %s, %s", destination, source);
+            sprintf(out, "%s, %s", destination, source);
             break;
         }
         }
+
     }
 
     return new_ip;
@@ -301,20 +347,65 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
     u16 lo = (u16)(buf[ip+1]);
     u16 instr = hi | lo;
     const u8 INSTR_LO = (instr >> 8);
+    u32 new_ip = ip;
 
 #ifdef DEBUG
-    printf("[MOV_MATCH] INSTR_LO: "); __print_bits(INSTR_LO);
+    printf("INSTR_LO: "); __print_bits(INSTR_LO);
+    printf("TEST_OP(INSTR_LO, IMOV_IMM2REG):  %d\n", TEST_OP(INSTR_LO, IMOV_IMM2REG));
+    printf("TEST_OP(INSTR_LO, IMOV_ACC2MEM):  %d\n", TEST_OP(INSTR_LO, IMOV_ACC2MEM));
+    printf("TEST_OP(INSTR_LO, IMOV_MEM2ACC):  %d\n", TEST_OP(INSTR_LO, IMOV_MEM2ACC));
+    printf("TEST_OP(INSTR_LO, IMOV_IMM2REGM): %d\n", TEST_OP(INSTR_LO, IMOV_IMM2REGMEM));
+    printf("TEST_OP(INSTR_LO, IMOV):          %d\n", TEST_OP(INSTR_LO, IMOV));
 #endif
 
-    if (TEST_OP(INSTR_LO, IMOV_IMM2REG)
-        || TEST_OP(INSTR_LO, IMOV)
-        || TEST_OP(INSTR_LO, IMOV_ACC2MEM)
-        || TEST_OP(INSTR_LO, IMOV_MEM2ACC)
-        || TEST_OP(INSTR_LO, IMOV_IMM2REGMEM)) {
-        return decode_mov(buf, ip, out);
+    char params[32] = {0};
+    op_variants_t matched_variant;
+    if (   (matched_variant=OPV_IMM2REG,    TEST_OP(INSTR_LO, IMOV_IMM2REG))
+        || (matched_variant=OPV_ACC2MEM,    TEST_OP(INSTR_LO, IMOV_ACC2MEM))
+        || (matched_variant=OPV_MEM2ACC,    TEST_OP(INSTR_LO, IMOV_MEM2ACC))
+        || (matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_LO, IMOV_IMM2REGMEM))
+        || (matched_variant=OPV_BASE,       TEST_OP(INSTR_LO, IMOV))
+        ) {
+#ifndef DEBUG
+        printf("[MOV] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
+#endif
+        new_ip = decode_params(buf, ip, matched_variant, params);
+        sprintf(out, "mov %s", params);
+        return new_ip;
     }
 
-    assert(0 && "No mov decode matched");
+#ifdef DEBUG
+    printf("TEST_OP(INSTR_LO, IADD_IMM2ACC):     %d\n", TEST_OP(INSTR_LO, IADD_IMM2ACC));
+    printf("TEST_OP(INSTR_LO, IADD_IMM2REGMEM):  %d\n", TEST_OP(INSTR_LO, IADD_IMM2REGMEM));
+    printf("TEST_OP(INSTR_LO, IADD):             %d\n", TEST_OP(INSTR_LO, IADD));
+#endif
+
+    if (   (matched_variant=OPV_IMM2REG,    TEST_OP(INSTR_LO, IADD_IMM2ACC))
+        || (matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_LO, IADD_IMM2REGMEM))
+        || (matched_variant=OPV_BASE,       TEST_OP(INSTR_LO, IADD))
+        ) {
+#ifndef DEBUG
+        printf("[ADD] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
+#endif
+        new_ip = decode_params(buf, ip, matched_variant, params);
+        sprintf(out, "add %s", params);
+        return new_ip;
+    }
+
+    // Check for opcodes with the same value (other flags must differ)
+    if (   (matched_variant=OPV_IMM2REG,    TEST_OP(INSTR_LO, IADD_IMM2ACC))
+        || (matched_variant=OPV_IMM2REG,    TEST_OP(INSTR_LO, ISUB_IMM_FROM_REGMEM))
+        // || (matched_variant=OPV_IMM2REG,    TEST_OP(INSTR_LO, ICMP_IMM_WITH_REGMEM))
+        ) {
+        switch ((buf[ip+1] >> 2) & 0b111) {
+        case 0b000: // ADD
+        case 0b101: // SUB
+        case 0b111: // CMP
+            break;
+        }
+    }
+
+    assert(0 && "No decode matched");
     return -1;
 }
 
@@ -349,7 +440,7 @@ int main(int argc, const char **argv) {
     strcat(out, "bits 16\n\n");
 
     for (u32 ip=0; ip<file_size; ip+=2) {
-        char line[32];
+        char line[64];
 
         ip = decode(buf, ip, line);
 
