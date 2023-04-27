@@ -51,6 +51,48 @@ typedef int64_t i64;
 #define ISUB_IMM_FROM_REGMEM 0b10000000 // Must check bits 2-3-4 from 2nd byte
 #define ISUB_IMM_FROM_ACC    0b00011100
 
+#define IJMP_DIRECT_SEG          0b11101001
+#define IJMP_DIRECT_SEG_SHORT    0b11101011
+#define IJMP_INDIRECT_SEG        0b11111111 // Must check bits 2-3-4 from 2nd byte
+#define IJMP_DIRECT_INTER_SEG    0b11101010 
+#define IJMP_INDIRECT_INTER_SEG  0b11111111 // Must check bits 2-3-4 from 2nd byte
+
+#define IJE   0b01110100
+#define IJZ   0b01110100
+#define IJL   0b01111100
+#define IJNGE 0b01111100
+#define IJLE  0b01111110
+#define IJNG  0b01111110
+#define IJB   0b01110010
+#define IJNAE 0b01110010
+#define IJBE  0b01110110
+#define IJNA  0b01110110
+#define IJP   0b01111010
+#define IJPE  0b01111010
+#define IJO   0b01110000
+#define IJS   0b01111000
+#define IJNE  0b01110101
+#define IJNZ  0b01110101
+#define IJNL  0b01111101
+#define IJGE  0b01111101
+#define IJNLE 0b01111111
+#define IJG   0b01111111
+#define IJNB  0b01110011
+#define IJAE  0b01110011
+#define IJNBE 0b01110111
+#define IJA   0b01110111
+#define IJNP  0b01111011
+#define IJPO  0b01111011
+#define IJNO  0b01110001
+#define INJS  0b01111001
+#define IJCXZ 0b11100011
+
+#define ILOOP   0b11100010
+#define ILOOPZ  0b11100001
+#define ILOOPE  0b11100001
+#define ILOOPNZ 0b11100000
+#define ILOOPNE 0b11100000
+
 #define OUT_BUFSIZE 2048
 
 #define TEST_OP(OPCODE, AGAINST) ((OPCODE>>(8-opcode_len(AGAINST)))==(AGAINST>>(8-opcode_len(AGAINST))))
@@ -392,6 +434,7 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
         return new_ip;
     }
 
+    new_ip = decode_params(buf, ip, matched_variant, params);
     // Check for opcodes with the same value (other flags must differ)
     if (   (matched_variant=OPV_IMM2REG,    TEST_OP(INSTR_LO, IADD_IMM2ACC))
         || (matched_variant=OPV_IMM2REG,    TEST_OP(INSTR_LO, ISUB_IMM_FROM_REGMEM))
@@ -399,8 +442,13 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
         ) {
         switch ((buf[ip+1] >> 2) & 0b111) {
         case 0b000: // ADD
+            sprintf(out, "add %s", params);
+            break;
         case 0b101: // SUB
-        case 0b111: // CMP
+            sprintf(out, "sub %s", params);
+            break;
+        case 0b111: // CMP 
+            sprintf(out, "cmp %s", params);
             break;
         }
     }
