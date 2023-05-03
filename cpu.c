@@ -325,8 +325,15 @@ u32 decode_params(const u8 *buf, const u32 ip,
 
         switch (MOD) {
         case MOD_RM: {
-            data = W ? OPT_2 << 8 | OPT_1 : OPT_1;
-            sprintf(rm, "[%s]", ops[RM]);
+            if (RM == RM_DIRECT) {
+                new_ip += 2;
+                i16 addr = OPT_2 << 8 | OPT_1;
+                data = W ? OPT_4 << 8 | OPT_3 : OPT_3;
+                sprintf(rm, "[%d]", addr);
+            } else {
+                data = W ? OPT_2 << 8 | OPT_1 : OPT_1;
+                sprintf(rm, "[%s]", ops[RM]);
+            }
             break;
         }
         case MOD_RM_OFF8: {
@@ -389,8 +396,15 @@ u32 decode_params(const u8 *buf, const u32 ip,
         u16 data = 0;
         switch (MOD) {
         case MOD_RM: {
-            data = is_wide_data ? OPT_2 << 8 | OPT_1 : OPT_1;
-            sprintf(rm, "[%s]", ops[RM]);
+            if (RM == RM_DIRECT) {
+                new_ip += 2;
+                i16 addr = OPT_2 << 8 | OPT_1;
+                data = is_wide_data ? OPT_4 << 8 | OPT_3 : OPT_3;
+                sprintf(rm, "[%d]", addr);
+            } else {
+                data = W ? OPT_2 << 8 | OPT_1 : OPT_1;
+                sprintf(rm, "[%s]", ops[RM]);
+            }
             break;
         }
         case MOD_RM_OFF8: {
