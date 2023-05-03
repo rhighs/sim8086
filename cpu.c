@@ -106,18 +106,42 @@ u8 opcode_len(u8 opcode) {
     u8 len = 8;
 
     switch (opcode) {
-    case IMOV:              len=6; break;
-    case IMOV_IMM2REGMEM:   len=7; break;
+
     case IMOV_IMM2REG:      len=4; break;
-    case IMOV_MEM2ACC:      len=7; break;
-    case IMOV_ACC2MEM:      len=7; break;
-    case IADD:              len=6; break;
-    case IADD_IMM2ACC:      len=6; break;
-    case ISUB:              len=6; break;
-    case ISUB_IMM_FROM_ACC: len=7; break;
+
+    case SAME_OPCODE_OPS:   
+    case IMOV:              
+    case IADD:              
+    case IADD_IMM2ACC:      
+    case ISUB:              
     case ICMP_REGMEM_REG:   len=6; break;
-    case ICMP_IMM_WITH_ACC: len=7; break;
-    case SAME_OPCODE_OPS:   len=6; break;
+
+    case ICMP_IMM_WITH_ACC:
+    case IMOV_IMM2REGMEM:
+    case IMOV_MEM2ACC:
+    case IMOV_ACC2MEM:
+    case ISUB_IMM_FROM_ACC:
+    case IJE:
+    case IJL:
+    case IJLE:
+    case IJB:
+    case IJNA:
+    case IJP:
+    case IJO:
+    case IJS:
+    case IJNE:
+    case IJNL:
+    case IJG:
+    case IJNB:
+    case IJA:
+    case IJNP:
+    case IJNO:
+    case INJS:              len = 7; break;
+
+    case IJCXZ:
+    case ILOOP:
+    case ILOOPZ:
+    case ILOOPNZ:           len = 8; break;
     }
 
     return len;
@@ -130,9 +154,10 @@ u8 opcode_len(u8 opcode) {
 typedef enum {
     OPV_BASE,
     OPV_IMM2REG,
-    OPV_IMM2REGMEM,
     OPV_MEM2ACC,
     OPV_ACC2MEM,
+    OPV_IMM2REGMEM,
+    OPV_IMM2REGMEM_SOURCEBIT, // Terrible, terrible decision
 } op_variants_t;
 
 inline
@@ -141,6 +166,7 @@ const char* opv_str(op_variants_t opv) {
     case OPV_BASE: return "OPV_BASE";
     case OPV_IMM2REG: return "OPV_IMM2REG";
     case OPV_IMM2REGMEM: return "OPV_IMM2REGMEM";
+    case OPV_IMM2REGMEM_SOURCEBIT: return "OPV_IMM2REGMEM_SOURCEBIT";
     case OPV_MEM2ACC: return "OPV_ACC2MEM";
     case OPV_ACC2MEM: return "ACC2MEM";
     }
@@ -275,6 +301,11 @@ u32 decode_params(const u8 *buf, const u32 ip,
 #endif
 
         u16 data = 0;
+        if (W) {
+            // One more byte of data
+            new_ip += 1;
+        }
+
         switch (MOD) {
         case MOD_RM: {
             data = W ? OPT_2 << 8 | OPT_1 : OPT_1;
@@ -302,11 +333,70 @@ u32 decode_params(const u8 *buf, const u32 ip,
         }
         }
 
-        if (W) {
+        sprintf(out, "%s, %s %d", rm, W ? "word" : "byte", data);
+
+        // There's always at least one additinal byte for 8-bit [data]
+        new_ip += 1;
+    } else if (variant == OPV_IMM2REGMEM_SOURCEBIT) {
+        const u8 S   = (instr & 0b0000001000000000) >> 9;
+        const u8 REG = (instr & 0b0000000000111000) >> 3;
+        const u8 W   = (instr & 0b0000000100000000) >> 8;
+        const u8 MOD = (instr & 0b0000000011000000) >> 6;
+        const u8 RM  = (instr & 0b0000000000000111);
+
+        const u16 OPT_1 = (u16)(buf[ip + 2]);
+        const u16 OPT_2 = (u16)(buf[ip + 3]);
+        const u16 OPT_3 = (u16)(buf[ip + 4]);
+        const u16 OPT_4 = (u16)(buf[ip + 5]);
+
+#ifdef DEBUG
+        printf("\n");
+        printf("INSTR_LO: "); __print_bits(INSTR_LO);
+        printf("W:        "); __print_bits(W);
+        printf("REG:      "); __print_bits(REG);
+        printf("S:        "); __print_bits(S);
+        printf("MOD:      "); __print_bits(MOD);
+        printf("RM:       "); __print_bits(RM);
+        printf("OPT_1:    "); __print_bits(OPT_1);
+        printf("OPT_2:    "); __print_bits(OPT_2);
+        printf("OPT_3:    "); __print_bits(OPT_3);
+        printf("OPT_4:    "); __print_bits(OPT_4);
+        printf("\n");
+#endif
+
+        u8 is_wide_data = (W == 1 && S == 0);
+        if (is_wide_data) {
             // One more byte of data
             new_ip += 1;
         }
-        __print_bits(data);
+
+        u16 data = 0;
+        switch (MOD) {
+        case MOD_RM: {
+            data = is_wide_data ? OPT_2 << 8 | OPT_1 : OPT_1;
+            sprintf(rm, "[%s]", ops[RM]);
+            break;
+        }
+        case MOD_RM_OFF8: {
+            i8 addr = OPT_1;
+            data = is_wide_data ? OPT_3 << 8 | OPT_2 : OPT_2;
+            char addr_sign = addr < 0 ? '-' : '+';
+            sprintf(rm, "[%s %c %d]", ops[RM], addr_sign, abs(addr));
+            new_ip += 1; break;
+        }
+        case MOD_RM_OFF16: {
+            i16 addr = OPT_2 << 8 | OPT_1;
+            data = is_wide_data ? OPT_4 << 8 | OPT_3 : OPT_3;
+            char addr_sign = addr < 0 ? '-' : '+';
+            sprintf(rm, "[%s %c %d]", ops[RM], addr_sign, abs(addr));
+            new_ip += 2; break;
+        }
+        case MOD_R2R: {
+            data = is_wide_data ? OPT_2 << 8 | OPT_1 : OPT_1;
+            sprintf(rm, "%s", ops[RM]);
+            break;
+        }
+        }
 
         sprintf(out, "%s, %s %d", rm, W ? "word" : "byte", data);
 
@@ -343,8 +433,8 @@ u32 decode_params(const u8 *buf, const u32 ip,
         
         case MOD_RM: {
             if (RM == RM_DIRECT) {
-                u16 hi = (u16)(buf[ip + 2]) << 8;
-                u16 lo = (u16)(buf[ip + 3]);
+                u16 hi = (u16)(buf[ip + 3]) << 8;
+                u16 lo = (u16)(buf[ip + 2]);
                 u16 wide = hi | lo;
                 sprintf(rm, "[%d]", wide);
                 new_ip += 2;
@@ -379,8 +469,8 @@ u32 decode_params(const u8 *buf, const u32 ip,
         }
 
         case MOD_RM_OFF16: {
-            u16 hi = (u16)(buf[ip + 2]) << 8;
-            u16 lo = (u16)(buf[ip + 3]);
+            u16 hi = (u16)(buf[ip + 3]) << 8;
+            u16 lo = (u16)(buf[ip + 2]);
             u16 data = hi | lo;
             const i16 wide = (data >> 8) | (data << 8);
             char wide_sign = wide < 0 ? '-' : '+';
@@ -473,6 +563,9 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
     printf("TEST_OP(INSTR_LO, ICMP_IMM_WITH_REGMEM):  %d\n", TEST_OP(INSTR_LO, ICMP_IMM_WITH_REGMEM));
 #endif
 
+     const u8 bits_432 = (buf[ip+1] >> 3) & 0b111;
+
+
     if (   (matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_LO, ICMP_IMM_WITH_ACC))
         || (matched_variant=OPV_BASE,       TEST_OP(INSTR_LO, ICMP_REGMEM_REG))
         ) {
@@ -488,11 +581,11 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
     if (   TEST_OP(INSTR_LO, IADD_IMM2REGMEM)
         || TEST_OP(INSTR_LO, ISUB_IMM_FROM_REGMEM)
         || TEST_OP(INSTR_LO, ICMP_IMM_WITH_REGMEM)) {
-        new_ip = decode_params(buf, ip, OPV_IMM2REGMEM, params);
+        new_ip = decode_params(buf, ip, OPV_IMM2REGMEM_SOURCEBIT, params);
         const u8 bits_432 = (buf[ip+1] >> 3) & 0b111;
 
 #ifndef DEBUG
-        printf("[CONFLICT_CASE]\n"); __print_bits(bits_432);
+        printf("[CONFLICT_CASE]: "); __print_bits(bits_432);
 #endif
 
         switch (bits_432) {
