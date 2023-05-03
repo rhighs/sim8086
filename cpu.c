@@ -49,7 +49,7 @@ typedef int64_t i64;
 
 #define ISUB                 0b00101000
 #define ISUB_IMM_FROM_REGMEM 0b10000000 // Must check bits 2-3-4 from 2nd byte
-#define ISUB_IMM_FROM_ACC    0b00011100
+#define ISUB_IMM_FROM_ACC    0b00101100
 
 #define ICMP_REGMEM_REG      0b00111000
 #define ICMP_IMM_WITH_REGMEM 0b10000000 // Must check bits 2-3-4 from 2nd byte
@@ -155,6 +155,7 @@ typedef enum {
     OPV_BASE,
     OPV_IMM2REG,
     OPV_MEM2ACC,
+    OPV_IMM2ACC,
     OPV_ACC2MEM,
     OPV_IMM2REGMEM,
     OPV_IMM2REGMEM_SOURCEBIT, // Terrible, terrible decision
@@ -169,6 +170,7 @@ const char* opv_str(op_variants_t opv) {
     case OPV_IMM2REGMEM_SOURCEBIT: return "OPV_IMM2REGMEM_SOURCEBIT";
     case OPV_MEM2ACC: return "OPV_ACC2MEM";
     case OPV_ACC2MEM: return "ACC2MEM";
+    case OPV_IMM2ACC: return "IMM2ACC";
     }
     return "";
 }
@@ -229,13 +231,29 @@ u32 decode_params(const u8 *buf, const u32 ip,
     u32 new_ip = ip;
     char reg[32] = { 0 }, rm[32] = { 0 };
 
-    if (variant == OPV_IMM2REG) {
-        const u8 W = (instr & 0b0000100000000000) >> 11;
-        const u8 REG = (instr & 0b0000011100000000) >> 8;
-        regcode_to_str(REG, W, reg);
+    printf("\n[DECODE_VARIANT]:%s\n", opv_str(variant));
+
+    if (variant == OPV_IMM2ACC) {
+        const u8 W = (instr & 0b0000000100000000) >> 8;
 
 #ifdef DEBUG
+        printf("INSTR_LO: "); __print_bits(INSTR_LO);
+        printf("W:        "); __print_bits(W);
         printf("\n");
+#endif
+        u8 data8   = instr & 0b0000000011111111;
+        u16 data16 = instr & 0b0000000011111111;
+        if (W) {
+            data16 = ((u16)(buf[ip + 2] << 8)) | data16;
+            new_ip += 1;
+        }
+
+       sprintf(out, "%s, %d", W ? "ax" : "al", W ? data16 : data8);
+    } else if (variant == OPV_IMM2REG) {
+        const u8 W = (instr & 0b0000100000000000) >> 11;
+        const u8 REG = (instr & 0b0000011100000000) >> 8;
+
+#ifdef DEBUG
         printf("INSTR_LO: "); __print_bits(INSTR_LO);
         printf("W:        "); __print_bits(W);
         printf("REG:      "); __print_bits(REG);
@@ -286,7 +304,6 @@ u32 decode_params(const u8 *buf, const u32 ip,
         const u16 OPT_4 = (u16)(buf[ip + 5]);
 
 #ifdef DEBUG
-        printf("\n");
         printf("INSTR_LO: "); __print_bits(INSTR_LO);
         printf("W:        "); __print_bits(W);
         printf("REG:      "); __print_bits(REG);
@@ -350,7 +367,6 @@ u32 decode_params(const u8 *buf, const u32 ip,
         const u16 OPT_4 = (u16)(buf[ip + 5]);
 
 #ifdef DEBUG
-        printf("\n");
         printf("INSTR_LO: "); __print_bits(INSTR_LO);
         printf("W:        "); __print_bits(W);
         printf("REG:      "); __print_bits(REG);
@@ -410,7 +426,6 @@ u32 decode_params(const u8 *buf, const u32 ip,
         const u8 RM  = (instr & 0b0000000000000111);
 
 #ifdef DEBUG
-        printf("\n");
         printf("INSTR_LO: "); __print_bits(INSTR_LO);
         printf("W:        "); __print_bits(W);
         printf("REG:      "); __print_bits(REG);
@@ -529,7 +544,7 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
     printf("TEST_OP(INSTR_LO, IADD):             %d\n", TEST_OP(INSTR_LO, IADD));
 #endif
 
-    if (   (matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_LO, IADD_IMM2ACC))
+    if (   (matched_variant=OPV_IMM2ACC,    TEST_OP(INSTR_LO, IADD_IMM2ACC))
         || (matched_variant=OPV_BASE,       TEST_OP(INSTR_LO, IADD))
         ) {
 #ifndef DEBUG
@@ -546,7 +561,7 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
     printf("TEST_OP(INSTR_LO, ISUB):                  %d\n", TEST_OP(INSTR_LO, ISUB));
 #endif
 
-    if (   (matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_LO, ISUB_IMM_FROM_ACC))
+    if (   (matched_variant=OPV_IMM2ACC,    TEST_OP(INSTR_LO, ISUB_IMM_FROM_ACC))
         || (matched_variant=OPV_BASE,       TEST_OP(INSTR_LO, ISUB))
         ) {
 #ifndef DEBUG
@@ -654,6 +669,9 @@ int main(int argc, const char **argv) {
         assert(strlen(line) != 0);
         strcat(line, "\n");
         strcat(out, line);
+#ifdef DEBUG
+        printf("\n==================\nLINE: %s==================\n", line);
+#endif
     }
 
     fprintf(stdout, "%s", out);
