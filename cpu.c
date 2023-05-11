@@ -4,6 +4,9 @@
 #include <string.h>
 #include <assert.h>
 
+#define unimplemented() (assert(!NULL && "unimplemented!"))
+
+#define NONE 0
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -102,6 +105,7 @@ typedef int64_t i64;
 #define SAME_OPCODE_OPS 0b10000000
 
 #define TEST_OP(OPCODE, AGAINST) ((OPCODE>>(8-opcode_len(AGAINST)))==(AGAINST>>(8-opcode_len(AGAINST))))
+
 u8 opcode_len(u8 opcode) {
     u8 len = 8;
 
@@ -147,11 +151,64 @@ u8 opcode_len(u8 opcode) {
     return len;
 }
 
+const char* instr2str(const u8 instruction, const u8 opt_pattern) {
+    switch (instruction) {
+    case SAME_OPCODE_OPS:
+        switch (opt_pattern) {
+        case 0b000: return "add";
+        case 0b101: return "sub";
+        case 0b111: return "cmp";
+        }
+    case IMOV:
+    case IMOV_IMM2REG:
+    case IMOV_IMM2REGMEM :
+    case IMOV_MEM2ACC:
+    case IMOV_ACC2MEM:
+        return "mov";
+    case IADD:
+    case IADD_IMM2ACC:
+        return "add";
+    case ISUB:
+    case ISUB_IMM_FROM_ACC:
+        return "sub";
+    case ICMP_REGMEM_REG:
+    case ICMP_IMM_WITH_ACC:
+        return "cmp";
+    case IJMP_DIRECT_SEG:
+    case IJMP_DIRECT_SEG_SHORT:
+    case IJMP_INDIRECT_SEG:
+    case IJMP_DIRECT_INTER_SEG:
+        return "jmp";
+    case IJE:        return "je";
+    case IJL:        return "jl";
+    case IJLE:       return "jle";
+    case IJB:        return "jb";
+    case IJBE:       return "jbe";
+    case IJP:        return "jp";
+    case IJO:        return "jo";
+    case IJS:        return "js";
+    case IJNE:       return "jne";
+    case IJNL:       return "jnl";
+    case IJNLE:      return "jnle";
+    case IJNB:       return "jnb";
+    case IJNBE:      return "jnbe";
+    case IJNP:       return "jnp";
+    case IJNO:       return "jno";
+    case INJS:       return "njs";
+    case IJCXZ:      return "jcxz";
+    case ILOOP:      return "loop";
+    case ILOOPZ:     return "loopz";
+    case ILOOPNZ:    return "loopnz";
+    }
+    return "unreachable";
+}
+
 /**
  * Defines common parameters placements in opcodes such as mov, sub, add
  * (all of which share the same memory patterns)
  */
 typedef enum {
+    OPV_JMP,
     OPV_BASE,
     OPV_IMM2REG,
     OPV_MEM2ACC,
@@ -220,6 +277,18 @@ const char *ops[8] = {
     "bp",
     "bx",
 };
+
+u32 decode_jmps(const u8 *buf, const u32 ip,
+        op_variants_t variant, char *out) {
+    unimplemented();
+    return 0;
+}
+
+u32 decode_loops(const u8 *buf, const u32 ip,
+        op_variants_t variant, char *out) {
+    unimplemented();
+    return 0;
+}
 
 u32 decode_params(const u8 *buf, const u32 ip,
         op_variants_t variant, char *out) {
@@ -613,6 +682,46 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
         new_ip = decode_params(buf, ip, matched_variant, params);
         sprintf(out, "cmp %s", params);
         return new_ip;
+    }
+
+    if (   (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJMP_DIRECT_SEG))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJMP_DIRECT_SEG_SHORT))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJMP_INDIRECT_SEG))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJMP_DIRECT_INTER_SEG))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJE))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJL))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJLE))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJB))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJBE))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJP))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJO))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJS))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJNE))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJNL))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJNLE))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJNB))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJNBE))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJNP))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJNO))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, INJS))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJCXZ))) {
+        // decode jumps
+        char params[32];
+        const char* instr_str = instr2str(INSTR_HI, NONE);
+        assert((instr_str[0] == 'j' || instr_str[0] == 'n')
+                && "instruction name must start with either 'j' or 'n'");
+        new_ip = decode_jmps(buf, ip, matched_variant, params);
+    }
+
+    if (   (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, ILOOP))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, ILOOPZ))
+        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, ILOOPNZ))
+       ) {
+        // decode loops
+        char params[32];
+        const char* instr_str = instr2str(INSTR_HI, NONE);
+        assert(instr_str[0] == 'l' && "instruction name must start with 'l'");
+        new_ip = decode_loops(buf, ip, matched_variant, params);
     }
 
     // Check for opcodes with the same value (other flags must differ)
