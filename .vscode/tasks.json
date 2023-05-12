@@ -3,7 +3,7 @@
         {
             "type": "cppbuild",
             "label": "move movs",
-            "command": "make",
+            "command": "/bin/bash make debug",
             "args": [
                 "more-movs-db",
             ],

@@ -1,4 +1,4 @@
-CXX:=tcc
+CXX:=gcc
 
 build:
 	$(CXX) -std=c11 -O3 *.c -g -DDEBUG -o cpu

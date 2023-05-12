@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/cpu",
-            "args": ["./samples/listing_0039_more_movs"],
+            "args": ["./samples/listing_0041_add_sub_cmp_jnz"],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],

@@ -4,8 +4,6 @@
 #include <string.h>
 #include <assert.h>
 
-#define unimplemented() (assert(!NULL && "unimplemented!"))
-
 #define NONE 0
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -124,7 +122,12 @@ u8 opcode_len(u8 opcode) {
     case IMOV_IMM2REGMEM:
     case IMOV_MEM2ACC:
     case IMOV_ACC2MEM:
-    case ISUB_IMM_FROM_ACC:
+    case ISUB_IMM_FROM_ACC: len=7; break;
+
+    case IJMP_DIRECT_SEG:
+    case IJMP_DIRECT_SEG_SHORT:
+    case IJMP_INDIRECT_SEG:
+    case IJMP_DIRECT_INTER_SEG: 
     case IJE:
     case IJL:
     case IJLE:
@@ -140,8 +143,7 @@ u8 opcode_len(u8 opcode) {
     case IJA:
     case IJNP:
     case IJNO:
-    case INJS:              len = 7; break;
-
+    case INJS:
     case IJCXZ:
     case ILOOP:
     case ILOOPZ:
@@ -218,7 +220,6 @@ typedef enum {
     OPV_IMM2REGMEM_SOURCEBIT, // Terrible, terrible decision
 } op_variants_t;
 
-inline
 const char* opv_str(op_variants_t opv) {
     switch (opv) {
     case OPV_BASE: return "OPV_BASE";
@@ -226,8 +227,9 @@ const char* opv_str(op_variants_t opv) {
     case OPV_IMM2REGMEM: return "OPV_IMM2REGMEM";
     case OPV_IMM2REGMEM_SOURCEBIT: return "OPV_IMM2REGMEM_SOURCEBIT";
     case OPV_MEM2ACC: return "OPV_ACC2MEM";
-    case OPV_ACC2MEM: return "ACC2MEM";
-    case OPV_IMM2ACC: return "IMM2ACC";
+    case OPV_ACC2MEM: return "OPV_ACC2MEM";
+    case OPV_IMM2ACC: return "OPV_IMM2ACC";
+    case OPV_JMP: return "OPV_JMP";
     }
     return "";
 }
@@ -278,15 +280,72 @@ const char *ops[8] = {
     "bx",
 };
 
+typedef struct {
+    u32 len;
+    u32 cap;
+    u32* buf;
+} jmp_locations_t;
+jmp_locations_t jmp_locations;
+
+void init_jmp(const u32 len) {
+    jmp_locations.buf = (u32 *)malloc(sizeof(u32) * len);
+    jmp_locations.cap = len;
+    jmp_locations.len = 0;
+    memset(jmp_locations.buf,
+        0, sizeof(u32) * len);
+}
+
+u32 check_jmp(u32 location) {
+    for (u32 i=0; i < jmp_locations.len; i++) {
+        if(jmp_locations.buf[i] == location)
+            return i;
+    }
+    return UINT32_MAX;
+}
+
+void jmp_set(u32 location) {
+    assert(jmp_locations.len < jmp_locations.cap);
+    jmp_locations.buf[jmp_locations.len++] = location;
+}
+
 u32 decode_jmps(const u8 *buf, const u32 ip,
-        op_variants_t variant, char *out) {
-    unimplemented();
-    return 0;
+        const u8 jmp_code, char *out) {
+    u32 new_ip = ip;
+
+    switch(jmp_code) {
+    case IJE:
+    case IJL:
+    case IJLE:
+    case IJB:
+    case IJBE:
+    case IJP:
+    case IJO:
+    case IJS:
+    case IJNE:
+    case IJNL:
+    case IJNLE:
+    case IJNB:
+    case IJNBE:
+    case IJNP:
+    case IJNO:
+    case INJS:
+    case IJCXZ:
+        u32 location = 0;
+        i8 displacement_sgn = buf[ip+1];
+        u32 displacement = abs((i32)displacement_sgn);
+        location = displacement_sgn < 0
+            ? ip - displacement
+            : ip + displacement;
+        if (check_jmp(location) == UINT32_MAX)
+            jmp_set(location);
+        break;
+    }
+
+    return new_ip;
 }
 
 u32 decode_loops(const u8 *buf, const u32 ip,
         op_variants_t variant, char *out) {
-    unimplemented();
     return 0;
 }
 
@@ -623,7 +682,7 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
         || (matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_HI, IMOV_IMM2REGMEM))
         || (matched_variant=OPV_BASE,       TEST_OP(INSTR_HI, IMOV))
         ) {
-#ifndef DEBUG
+#ifdef DEBUG
         printf("[MOV] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
 #endif
         new_ip = decode_params(buf, ip, matched_variant, params);
@@ -640,7 +699,7 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
     if (   (matched_variant=OPV_IMM2ACC,    TEST_OP(INSTR_HI, IADD_IMM2ACC))
         || (matched_variant=OPV_BASE,       TEST_OP(INSTR_HI, IADD))
         ) {
-#ifndef DEBUG
+#ifdef DEBUG
         printf("[ADD] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
 #endif
         new_ip = decode_params(buf, ip, matched_variant, params);
@@ -657,7 +716,7 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
     if (   (matched_variant=OPV_IMM2ACC,    TEST_OP(INSTR_HI, ISUB_IMM_FROM_ACC))
         || (matched_variant=OPV_BASE,       TEST_OP(INSTR_HI, ISUB))
         ) {
-#ifndef DEBUG
+#ifdef DEBUG
         printf("[SUB] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
 #endif
         new_ip = decode_params(buf, ip, matched_variant, params);
@@ -676,7 +735,7 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
     if (   (matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_HI, ICMP_IMM_WITH_ACC))
         || (matched_variant=OPV_BASE,       TEST_OP(INSTR_HI, ICMP_REGMEM_REG))
         ) {
-#ifndef DEBUG
+#ifdef DEBUG
         printf("[CMP] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
 #endif
         new_ip = decode_params(buf, ip, matched_variant, params);
@@ -684,44 +743,55 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
         return new_ip;
     }
 
-    if (   (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJMP_DIRECT_SEG))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJMP_DIRECT_SEG_SHORT))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJMP_INDIRECT_SEG))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJMP_DIRECT_INTER_SEG))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJE))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJL))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJLE))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJB))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJBE))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJP))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJO))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJS))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJNE))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJNL))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJNLE))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJNB))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJNBE))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJNP))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJNO))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, INJS))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, IJCXZ))) {
+    u8 matched_jmp_code;
+    if (   (matched_jmp_code=IJMP_DIRECT_SEG,           TEST_OP(INSTR_HI, IJMP_DIRECT_SEG))
+        || (matched_jmp_code=IJMP_DIRECT_SEG_SHORT,     TEST_OP(INSTR_HI, IJMP_DIRECT_SEG_SHORT))
+        || (matched_jmp_code=IJMP_INDIRECT_SEG,         TEST_OP(INSTR_HI, IJMP_INDIRECT_SEG))
+        || (matched_jmp_code=IJMP_DIRECT_INTER_SEG,     TEST_OP(INSTR_HI, IJMP_DIRECT_INTER_SEG))
+        || (matched_jmp_code=IJE,                       TEST_OP(INSTR_HI, IJE))
+        || (matched_jmp_code=IJL,                       TEST_OP(INSTR_HI, IJL))
+        || (matched_jmp_code=IJLE,                      TEST_OP(INSTR_HI, IJLE))
+        || (matched_jmp_code=IJB,                       TEST_OP(INSTR_HI, IJB))
+        || (matched_jmp_code=IJBE,                      TEST_OP(INSTR_HI, IJBE))
+        || (matched_jmp_code=IJP,                       TEST_OP(INSTR_HI, IJP))
+        || (matched_jmp_code=IJO,                       TEST_OP(INSTR_HI, IJO))
+        || (matched_jmp_code=IJS,                       TEST_OP(INSTR_HI, IJS))
+        || (matched_jmp_code=IJNE,                      TEST_OP(INSTR_HI, IJNE))
+        || (matched_jmp_code=IJNL,                      TEST_OP(INSTR_HI, IJNL))
+        || (matched_jmp_code=IJNLE,                     TEST_OP(INSTR_HI, IJNLE))
+        || (matched_jmp_code=IJNB,                      TEST_OP(INSTR_HI, IJNB))
+        || (matched_jmp_code=IJNBE,                     TEST_OP(INSTR_HI, IJNBE))
+        || (matched_jmp_code=IJNP,                      TEST_OP(INSTR_HI, IJNP))
+        || (matched_jmp_code=IJNO,                      TEST_OP(INSTR_HI, IJNO))
+        || (matched_jmp_code=INJS,                      TEST_OP(INSTR_HI, INJS))
+        || (matched_jmp_code=IJCXZ,                     TEST_OP(INSTR_HI, IJCXZ))) {
         // decode jumps
+#ifdef DEBUG
+        printf("[JUMPS] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
+#endif
         char params[32];
         const char* instr_str = instr2str(INSTR_HI, NONE);
         assert((instr_str[0] == 'j' || instr_str[0] == 'n')
                 && "instruction name must start with either 'j' or 'n'");
-        new_ip = decode_jmps(buf, ip, matched_variant, params);
+        new_ip = decode_jmps(buf, ip, matched_jmp_code, params);
+
+        return new_ip;
     }
 
     if (   (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, ILOOP))
         || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, ILOOPZ))
         || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, ILOOPNZ))
        ) {
+#ifdef DEBUG
+        printf("[LOOPS] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
+#endif
         // decode loops
         char params[32];
         const char* instr_str = instr2str(INSTR_HI, NONE);
         assert(instr_str[0] == 'l' && "instruction name must start with 'l'");
         new_ip = decode_loops(buf, ip, matched_variant, params);
+
+        return new_ip;
     }
 
     // Check for opcodes with the same value (other flags must differ)
@@ -731,25 +801,25 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
         new_ip = decode_params(buf, ip, OPV_IMM2REGMEM_SOURCEBIT, params);
         const u8 bits_432 = (buf[ip+1] >> 3) & 0b111;
 
-#ifndef DEBUG
+#ifdef DEBUG
         printf("[CONFLICT_CASE]: "); __print_bits(bits_432);
 #endif
 
         switch (bits_432) {
         case 0b000: // ADD
-#ifndef DEBUG
+#ifdef DEBUG
         printf("[ADD] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
             sprintf(out, "add %s", params);
             break;
         case 0b101: // SUB
-#ifndef DEBUG
+#ifdef DEBUG
         printf("[SUB] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
             sprintf(out, "sub %s", params);
             break;
         case 0b111: // CMP 
-#ifndef DEBUG
+#ifdef DEBUG
         printf("[CMP] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
             sprintf(out, "cmp %s", params);
@@ -784,6 +854,7 @@ int main(int argc, const char **argv) {
     while ((nread = fread(buf, sizeof(u8), file_size, file)) > 0) {
         bytes_read += nread;
     }
+    init_jmp(bytes_read);
     if (ferror(file)) {
         goto read_error;
     }
