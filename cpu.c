@@ -99,6 +99,7 @@ typedef int64_t i64;
 #define ILOOPNE 0b11100000
 
 #define OUT_BUFSIZE 2048
+#define NO_LABELS 64
 
 #define SAME_OPCODE_OPS 0b10000000
 
@@ -284,6 +285,7 @@ typedef struct {
     u32 len;
     u32 cap;
     u32* buf;
+    char** labels;
 } jmp_locations_t;
 jmp_locations_t jmp_locations;
 
@@ -293,19 +295,28 @@ void init_jmp(const u32 len) {
     jmp_locations.len = 0;
     memset(jmp_locations.buf,
         0, sizeof(u32) * len);
+    jmp_locations.labels = 
+       (char**)malloc(sizeof(char*) * len);
+    for (u32 i=0; i<NO_LABELS; i++) {
+        jmp_locations.labels[i] =
+            (char*)malloc(sizeof(char) * 64);
+    }
 }
 
-u32 check_jmp(u32 location) {
+i32 check_jmp(u32 location) {
     for (u32 i=0; i < jmp_locations.len; i++) {
         if(jmp_locations.buf[i] == location)
             return i;
     }
-    return UINT32_MAX;
+    return 0;
 }
 
 void jmp_set(u32 location) {
     assert(jmp_locations.len < jmp_locations.cap);
-    jmp_locations.buf[jmp_locations.len++] = location;
+    jmp_locations.buf[jmp_locations.len] = location;
+    sprintf(jmp_locations.labels[jmp_locations.len],
+            "test_label_%d:", jmp_locations.len);
+    jmp_locations.len += 1;
 }
 
 u32 decode_jmps(const u8 *buf, const u32 ip,
@@ -329,16 +340,19 @@ u32 decode_jmps(const u8 *buf, const u32 ip,
     case IJNP:
     case IJNO:
     case INJS:
-    case IJCXZ:
+    case IJCXZ: {
         u32 location = 0;
         i8 displacement_sgn = buf[ip+1];
         u32 displacement = abs((i32)displacement_sgn);
         location = displacement_sgn < 0
             ? ip - displacement
             : ip + displacement;
-        if (check_jmp(location) == UINT32_MAX)
+        if (check_jmp(location) == 0) {
             jmp_set(location);
+        }
         break;
+    }
+    default: return new_ip;
     }
 
     return new_ip;
@@ -860,24 +874,46 @@ int main(int argc, const char **argv) {
     }
     fclose(file);
 
-    char out[OUT_BUFSIZE];
-    memset(out, 0, OUT_BUFSIZE);
-    strcat(out, "bits 16\n\n");
+    char* out[OUT_BUFSIZE];
+    for (u32 i=0; i<OUT_BUFSIZE; i++) {
+        out[i] = malloc(sizeof(char) * 64);
+        memset(out[i], 0, sizeof(char) * 64);
+    }
+
+    u32 out_cursor = 0;
+    strcat(out[out_cursor], "bits 16\n\n");
+    out_cursor += 1;
+
+    u32 *ip_to_cursor = malloc(sizeof(u32) * file_size);
+    memset(ip_to_cursor, 0, sizeof(u32) * file_size);
 
     for (u32 ip=0; ip<file_size; ip+=2) {
         char line[64];
 
         ip = decode(buf, ip, line);
 
+        // Keep tracks of ip -> line
+        ip_to_cursor[ip] = out_cursor;
+
         assert(strlen(line) != 0);
         strcat(line, "\n");
-        strcat(out, line);
+        strcpy(out[out_cursor++], line);
 #ifdef DEBUG
         printf("\n==================\nLINE: %s==================\n", line);
 #endif
     }
 
-    fprintf(stdout, "%s", out);
+    for (u32 i=0; i<OUT_BUFSIZE; i++) {
+        for (u32 label_location=0;
+             label_location<jmp_locations.len; 
+             label_location++) {
+            if (ip_to_cursor[jmp_locations.buf[label_location]] == i) {
+                fprintf(stdout, "%s\n", jmp_locations.labels[label_location]);
+            }
+        }
+        fprintf(stdout, "%s", out[i]);
+    }
+
     return 0;
 
 no_arg_error:
