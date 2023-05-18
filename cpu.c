@@ -89,7 +89,7 @@ typedef int64_t i64;
 #define IJNP  0b01111011
 #define IJPO  0b01111011
 #define IJNO  0b01110001
-#define INJS  0b01111001
+#define IJNS  0b01111001
 #define IJCXZ 0b11100011
 
 #define ILOOP   0b11100010
@@ -144,7 +144,7 @@ u8 opcode_len(u8 opcode) {
     case IJA:
     case IJNP:
     case IJNO:
-    case INJS:
+    case IJNS:
     case IJCXZ:
     case ILOOP:
     case ILOOPZ:
@@ -197,7 +197,7 @@ const char* instr2str(const u8 instruction, const u8 opt_pattern) {
     case IJNBE:      return "jnbe";
     case IJNP:       return "jnp";
     case IJNO:       return "jno";
-    case INJS:       return "njs";
+    case IJNS:       return "jns";
     case IJCXZ:      return "jcxz";
     case ILOOP:      return "loop";
     case ILOOPZ:     return "loopz";
@@ -303,10 +303,10 @@ void init_jmp(const u32 len) {
     }
 }
 
-i32 check_jmp(u32 location) {
+u8 check_jmp(u32 location) {
     for (u32 i=0; i < jmp_locations.len; i++) {
         if(jmp_locations.buf[i] == location)
-            return i;
+            return 1;
     }
     return 0;
 }
@@ -324,6 +324,13 @@ u32 decode_jmps(const u8 *buf, const u32 ip,
     u32 new_ip = ip;
 
     switch(jmp_code) {
+    case IJMP_DIRECT_SEG:
+    case IJMP_DIRECT_SEG_SHORT:
+    case IJMP_INDIRECT_SEG:
+    // case IJMP_INDIRECT_INTER_SEG:
+    case IJMP_DIRECT_INTER_SEG: 
+        assert(0 && "Unimplemented!");
+        break;
     case IJE:
     case IJL:
     case IJLE:
@@ -339,7 +346,7 @@ u32 decode_jmps(const u8 *buf, const u32 ip,
     case IJNBE:
     case IJNP:
     case IJNO:
-    case INJS:
+    case IJNS:
     case IJCXZ: {
         u32 location = 0;
         i8 displacement_sgn = buf[ip+1];
@@ -347,9 +354,14 @@ u32 decode_jmps(const u8 *buf, const u32 ip,
         location = displacement_sgn < 0
             ? ip - displacement
             : ip + displacement;
-        if (check_jmp(location) == 0) {
+        if (!check_jmp(location)) {
             jmp_set(location);
         }
+        u32 label_idx = 0;
+        for (; label_idx<jmp_locations.len
+                && jmp_locations.buf[label_idx]!=location;
+                label_idx++);
+        sprintf(out, "%s", jmp_locations.labels[label_idx]);
         break;
     }
     default: return new_ip;
@@ -360,7 +372,7 @@ u32 decode_jmps(const u8 *buf, const u32 ip,
 
 u32 decode_loops(const u8 *buf, const u32 ip,
         op_variants_t variant, char *out) {
-    return 0;
+    return ip;
 }
 
 u32 decode_params(const u8 *buf, const u32 ip,
@@ -374,7 +386,9 @@ u32 decode_params(const u8 *buf, const u32 ip,
     u32 new_ip = ip;
     char reg[32] = { 0 }, rm[32] = { 0 };
 
+#ifdef DEBUG
     printf("\n[DECODE_VARIANT]:%s\n", opv_str(variant));
+#endif
 
     if (variant == OPV_IMM2ACC) {
         const u8 W = (instr & 0b0000000100000000) >> 8;
@@ -777,7 +791,7 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
         || (matched_jmp_code=IJNBE,                     TEST_OP(INSTR_HI, IJNBE))
         || (matched_jmp_code=IJNP,                      TEST_OP(INSTR_HI, IJNP))
         || (matched_jmp_code=IJNO,                      TEST_OP(INSTR_HI, IJNO))
-        || (matched_jmp_code=INJS,                      TEST_OP(INSTR_HI, INJS))
+        || (matched_jmp_code=IJNS,                      TEST_OP(INSTR_HI, IJNS))
         || (matched_jmp_code=IJCXZ,                     TEST_OP(INSTR_HI, IJCXZ))) {
         // decode jumps
 #ifdef DEBUG
@@ -788,6 +802,7 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
         assert((instr_str[0] == 'j' || instr_str[0] == 'n')
                 && "instruction name must start with either 'j' or 'n'");
         new_ip = decode_jmps(buf, ip, matched_jmp_code, params);
+        sprintf(out, "%s %s", instr2str(matched_jmp_code, 0), params);
 
         return new_ip;
     }
@@ -904,6 +919,7 @@ int main(int argc, const char **argv) {
     }
 
     for (u32 i=0; i<OUT_BUFSIZE; i++) {
+        fprintf(stdout, "%s", out[i]);
         for (u32 label_location=0;
              label_location<jmp_locations.len; 
              label_location++) {
@@ -911,7 +927,6 @@ int main(int argc, const char **argv) {
                 fprintf(stdout, "%s\n", jmp_locations.labels[label_location]);
             }
         }
-        fprintf(stdout, "%s", out[i]);
     }
 
     return 0;
