@@ -4,106 +4,7 @@
 #include <string.h>
 #include <assert.h>
 
-#define NONE 0
-typedef uint8_t u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-typedef int8_t i8;
-typedef int16_t i16;
-typedef int32_t i32;
-typedef int64_t i64;
-
-#define REG_AL 0x0
-#define REG_CL 0x1
-#define REG_DL 0x2
-#define REG_BL 0x3
-#define REG_AH 0x4
-#define REG_CH 0x5
-#define REG_DH 0x6
-#define REG_BH 0x7
-#define REG_AX 0x0
-#define REG_CX 0x1
-#define REG_DX 0x2
-#define REG_BX 0x3
-#define REG_SP 0x4
-#define REG_BP 0x5
-#define REG_SI 0x6
-#define REG_DI 0x7
-
-#define RM_DIRECT 0x6
-
-#define MOD_RM 0x0
-#define MOD_RM_OFF8 0x1
-#define MOD_RM_OFF16 0x2
-#define MOD_R2R 0x3
-
-#define IMOV            0b10001000
-#define IMOV_IMM2REG    0b10110000
-#define IMOV_IMM2REGMEM 0b11000110
-#define IMOV_MEM2ACC    0b10100000
-#define IMOV_ACC2MEM    0b10100010
-
-#define IADD            0b00000000
-#define IADD_IMM2REGMEM 0b10000000 // Must check bits 2-3-4 from 2nd byte
-#define IADD_IMM2ACC    0b00000100
-
-#define ISUB                 0b00101000
-#define ISUB_IMM_FROM_REGMEM 0b10000000 // Must check bits 2-3-4 from 2nd byte
-#define ISUB_IMM_FROM_ACC    0b00101100
-
-#define ICMP_REGMEM_REG      0b00111000
-#define ICMP_IMM_WITH_REGMEM 0b10000000 // Must check bits 2-3-4 from 2nd byte
-#define ICMP_IMM_WITH_ACC    0b00111100
-
-#define IJMP_DIRECT_SEG          0b11101001
-#define IJMP_DIRECT_SEG_SHORT    0b11101011
-#define IJMP_INDIRECT_SEG        0b11111111 // Must check bits 2-3-4 from 2nd byte
-#define IJMP_DIRECT_INTER_SEG    0b11101010 
-#define IJMP_INDIRECT_INTER_SEG  0b11111111 // Must check bits 2-3-4 from 2nd byte
-
-#define IJE   0b01110100
-#define IJZ   0b01110100
-#define IJL   0b01111100
-#define IJNGE 0b01111100
-#define IJLE  0b01111110
-#define IJNG  0b01111110
-#define IJB   0b01110010
-#define IJNAE 0b01110010
-#define IJBE  0b01110110
-#define IJNA  0b01110110
-#define IJP   0b01111010
-#define IJPE  0b01111010
-#define IJO   0b01110000
-#define IJS   0b01111000
-#define IJNE  0b01110101
-#define IJNZ  0b01110101
-#define IJNL  0b01111101
-#define IJGE  0b01111101
-#define IJNLE 0b01111111
-#define IJG   0b01111111
-#define IJNB  0b01110011
-#define IJAE  0b01110011
-#define IJNBE 0b01110111
-#define IJA   0b01110111
-#define IJNP  0b01111011
-#define IJPO  0b01111011
-#define IJNO  0b01110001
-#define IJNS  0b01111001
-#define IJCXZ 0b11100011
-
-#define ILOOP   0b11100010
-#define ILOOPZ  0b11100001
-#define ILOOPE  0b11100001
-#define ILOOPNZ 0b11100000
-#define ILOOPNE 0b11100000
-
-#define OUT_BUFSIZE 2048
-#define NO_LABELS 64
-
-#define SAME_OPCODE_OPS 0b10000000
-
-#define TEST_OP(OPCODE, AGAINST) ((OPCODE>>(8-opcode_len(AGAINST)))==(AGAINST>>(8-opcode_len(AGAINST))))
+#include "decoder.h"
 
 u8 opcode_len(u8 opcode) {
     u8 len = 8;
@@ -205,21 +106,6 @@ const char* instr2str(const u8 instruction, const u8 opt_pattern) {
     }
     return "unreachable";
 }
-
-/**
- * Defines common parameters placements in opcodes such as mov, sub, add
- * (all of which share the same memory patterns)
- */
-typedef enum {
-    OPV_JMP,
-    OPV_BASE,
-    OPV_IMM2REG,
-    OPV_MEM2ACC,
-    OPV_IMM2ACC,
-    OPV_ACC2MEM,
-    OPV_IMM2REGMEM,
-    OPV_IMM2REGMEM_SOURCEBIT, // Terrible, terrible decision
-} op_variants_t;
 
 const char* opv_str(op_variants_t opv) {
     switch (opv) {
@@ -862,13 +748,8 @@ u32 decode(const u8 *buf, const u32 ip, char *out) {
     return -1;
 }
 
-int main(int argc, const char **argv) {
-    if (argc < 2)  {
-        goto no_arg_error;
-    }
-
-    const char* filename = argv[1];
-    FILE *file = fopen(filename, "r");
+u32 init_from_file(decoder_context_t *context, const char* filepath) {
+    FILE *file = fopen(filepath, "r");
     if (file == NULL) {
         goto bad_path_error;
     }
@@ -889,56 +770,27 @@ int main(int argc, const char **argv) {
     }
     fclose(file);
 
-    char* out[OUT_BUFSIZE];
-    for (u32 i=0; i<OUT_BUFSIZE; i++) {
-        out[i] = malloc(sizeof(char) * 64);
-        memset(out[i], 0, sizeof(char) * 64);
-    }
+    return file_size;
 
-    u32 out_cursor = 0;
-    strcat(out[out_cursor], "bits 16\n\n");
-    out_cursor += 1;
-
-    u32 *ip_to_cursor = malloc(sizeof(u32) * file_size);
-    memset(ip_to_cursor, 0, sizeof(u32) * file_size);
-
-    for (u32 ip=0; ip<file_size; ip+=2) {
-        char line[64];
-
-        ip = decode(buf, ip, line);
-
-        // Keep tracks of ip -> line
-        ip_to_cursor[ip] = out_cursor;
-
-        assert(strlen(line) != 0);
-        strcat(line, "\n");
-        strcpy(out[out_cursor++], line);
-#ifdef DEBUG
-        printf("\n==================\nLINE: %s==================\n", line);
-#endif
-    }
-
-    for (u32 i=0; i<OUT_BUFSIZE; i++) {
-        fprintf(stdout, "%s", out[i]);
-        for (u32 label_location=0;
-             label_location<jmp_locations.len; 
-             label_location++) {
-            if (ip_to_cursor[jmp_locations.buf[label_location]] == i) {
-                fprintf(stdout, "%s\n", jmp_locations.labels[label_location]);
-            }
-        }
-    }
-
-    return 0;
-
-no_arg_error:
-    fprintf(stderr, "[NO_ARG_ERR]: no file arg provided\n");
-    return -1;
 bad_path_error: 
-    fprintf(stderr, "[BAD_PATH_ERR]: path %s might not exist\n", filename);
-    return -1;
+    fprintf(stderr, "[BAD_PATH_ERR]: path %s might not exist\n", filepath);
+    return 0;
 read_error:
     fprintf(stderr, "[READ_FILE_ERR]: error reading file!\n");
     fclose(file);
-    return -1;
+    return 0;
 }
+
+u32 jmp_loc2label(const decoder_context_t *context, char *dst,
+        const u32 location) {
+    for (u32 label_location=0;
+         label_location<jmp_locations.len; 
+         label_location++) {
+        if (context->ip2decode[jmp_locations.buf[label_location]] == location) {
+            strcpy(dst, jmp_locations.labels[label_location]);
+            return strlen(dst);
+        }
+    }
+    return 0;
+}
+
