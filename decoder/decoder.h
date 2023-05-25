@@ -104,6 +104,63 @@ typedef int64_t i64;
 
 #define TEST_OP(OPCODE, AGAINST) ((OPCODE>>(8-opcode_len(AGAINST)))==(AGAINST>>(8-opcode_len(AGAINST))))
 
+typedef enum {
+    MOV,
+    MOV_IMM2REG,
+    MOV_IMM2REGMEM,
+    MOV_MEM2ACC,
+    MOV_ACC2MEM,
+    ADD,
+    ADD_IMM2REGMEM,
+    ADD_IMM2ACC,
+    SUB,
+    SUB_IMM_FROM_REGMEM,
+    SUB_IMM_FROM_ACC,
+    CMP_REGMEM_REG,
+    CMP_IMM_WITH_REGMEM,
+    CMP_IMM_WITH_ACC,
+    JMP_DIRECT_SEG,
+    JMP_DIRECT_SEG_SHORT,
+    JMP_INDIRECT_SEG,
+    JMP_DIRECT_INTER_SEG,
+    JMP_INDIRECT_INTER_SEG,
+    JE,
+    JZ,
+    JL,
+    JNGE,
+    JLE,
+    JNG,
+    JB,
+    JNAE,
+    JBE,
+    JNA,
+    JP,
+    JPE,
+    JO,
+    JS,
+    JNE,
+    JNZ,
+    JNL,
+    JGE,
+    JNLE,
+    JG,
+    JNB,
+    JAE,
+    JNBE,
+    JA,
+    JNP,
+    JPO,
+    JNO,
+    JNS,
+    JCXZ,
+    LOOP,
+    LOOPZ,
+    LOOPE,
+    LOOPNZ,
+    LOOPNE,
+    NOOP,
+} op_code_t;
+
 /**
  * Defines operand types assigned by the decoder
  */
@@ -112,17 +169,20 @@ typedef enum {
     OperandImmediate
 } operand_register_type_t;
 
+typedef struct {
+    operand_register_type_t type;
+    union {
+        struct { u16 value; } imm;
+        struct { u8 index; u8 is_wide; } reg;
+    };
+} operand_t;
+
 /**
  * A simple decode unit
  */
 typedef struct {
-    struct {
-        operand_register_type_t type;
-        union {
-            struct { u16 value; } imm;
-            struct { u8 index;  } reg;
-        };
-    } **operands;
+    operand_t **operands;
+    u8 op_code;
 } instruction_t;
 
 /**
@@ -144,11 +204,22 @@ typedef struct {
     u8 *buf;
     u32 buflen;
 
-    u32 *ip2decode;
+    u32 *ip2pc;
+    u32 pc;
 } decoder_context_t;
 
 u32 init_from_file(decoder_context_t *context, const char *filepath);
 
-u32 jmp_loc2label(const decoder_context_t *context, char *dst, const u32 location);
+u32 jmp_loc2label(const decoder_context_t *context, char *dst,
+        const u32 location);
+
+u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
+        const u32 ip, char *out);
+
+u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
+        op_variants_t variant, const u32 ip, char *out);
+
+u32 decode_jmps(decoder_context_t *context, instruction_t *decoded_construct,
+        const u32 ip, const u8 jmp_code, char *out);
 
 #endif
