@@ -173,7 +173,7 @@ typedef struct {
     operand_register_type_t type;
     union {
         struct { u16 value; } imm;
-        struct { u8 index; u8 is_wide; } reg;
+        struct { u8 index; } reg;
     };
 } operand_t;
 
@@ -182,6 +182,7 @@ typedef struct {
  */
 typedef struct {
     operand_t **operands;
+    u8 is_wide;
     u8 op_code;
 } instruction_t;
 
@@ -204,7 +205,7 @@ typedef struct {
     u8 *buf;
     u32 buflen;
 
-    u32 *ip2pc;
+    u32 *cursor2pc;
     u32 pc;
 } decoder_context_t;
 
@@ -214,12 +215,12 @@ u32 jmp_loc2label(const decoder_context_t *context, char *dst,
         const u32 location);
 
 u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
-        const u32 ip, char *out);
+        const u32 cursor, char *out);
 
 u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
-        op_variants_t variant, const u32 ip, char *out);
+        op_variants_t variant, const u32 cursor, char *out);
 
 u32 decode_jmps(decoder_context_t *context, instruction_t *decoded_construct,
-        const u32 ip, const u8 jmp_code, char *out);
+        const u32 cursor, const u8 jmp_code, char *out);
 
 #endif
