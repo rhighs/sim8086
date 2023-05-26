@@ -10,7 +10,7 @@ typedef struct {
 u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
     operand_t **operands = instruction.operands;
     switch (instruction.op_code) {
-        case MOV:
+        case OP_MOV:
             if (instruction.operands[1]->type == OperandImmediate) {
                 u32 reg = operands[0]->reg.index;
                 u16 value = operands[1]->imm.value;
