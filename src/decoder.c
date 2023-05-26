@@ -324,11 +324,11 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
             new_cursor += 1;
         }
 
-        decoded_construct->operands[0]->type = OperandRegister;
-        decoded_construct->operands[0]->reg.index = 0;
+        decoded_construct->operands[0].type = OperandRegister;
+        decoded_construct->operands[0].reg.index = REG;
         decoded_construct->is_wide = W;
-        decoded_construct->operands[1]->type = OperandImmediate;
-        decoded_construct->operands[1]->imm.value = data16;
+        decoded_construct->operands[1].type = OperandImmediate;
+        decoded_construct->operands[1].imm.value = data16;
 
 #ifdef DEBUG
         printf("DATA-8: "); __print_bits(data8);
@@ -548,10 +548,13 @@ decode_cmp:
             if (out != NULL)
                 sprintf(out, "%s, %s", destination, source);
 
-            decoded_construct->operands[0]->type = OperandRegister;
-            decoded_construct->operands[0]->reg.index = D ? REG : RM;
-            decoded_construct->operands[1]->type = OperandRegister;
-            decoded_construct->operands[1]->reg.index = D ? RM : REG;
+            u8 to = D ? REG : RM;
+            u8 from = D ? RM : REG;
+
+            decoded_construct->operands[0].type = OperandRegister;
+            decoded_construct->operands[0].reg.index = to;
+            decoded_construct->operands[1].type = OperandRegister;
+            decoded_construct->operands[1].reg.index = from;
             decoded_construct->is_wide = W;
 
             break;

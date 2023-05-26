@@ -52,9 +52,9 @@ typedef struct {
  * A simple decode unit
  */
 typedef struct {
-    operand_t **operands;
+    operand_t operands[2];
     u8 is_wide;
-    u8 op_code;
+    op_code_t op_code;
 } instruction_t;
 
 /**
