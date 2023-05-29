@@ -4,8 +4,10 @@
 #include <string.h>
 #include <assert.h>
 
-#include "op_code.h"
+#include "types.h"
+#include "opcode.h"
 #include "decoder.h"
+#include "instruction.h"
 
 u8 opcode_len(u8 opcode) {
     u8 len = 8;
@@ -304,6 +306,12 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
             new_cursor += 1;
         }
 
+        decoded_construct->operands[0].type = OperandRegister;
+        decoded_construct->operands[0].reg.index = __D_REG_AX;
+        decoded_construct->operands[1].type = OperandImmediate;
+        decoded_construct->operands[1].imm.value = data16;
+        decoded_construct->is_wide = W;
+
         if (out != NULL)
             sprintf(out, "%s, %d", W ? "ax" : "al", W ? data16 : data8);
     } else if (variant == OPV_IMM2REG) {
@@ -429,7 +437,13 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
         case __D_MOD_R2R: {
             data = W ? OPT_2 << 8 | OPT_1 : OPT_1;
             if (out != NULL)
-                sprintf(rm, "%s", ops[RM]);
+                regcode_to_str(RM, W, rm);
+
+            decoded_construct->operands[0].type = OperandRegister;
+            decoded_construct->operands[0].reg.index = RM;
+            decoded_construct->operands[1].type = OperandImmediate;
+            decoded_construct->operands[1].imm.value = data;
+            decoded_construct->is_wide = W;
             break;
         }
         }
@@ -439,11 +453,23 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
         new_cursor += 1;
 
 decode_cmp:
+        i8 data8 = (i8)INSTR_LO;
+        i16 data16 = (i16)INSTR_LO;
+        if (W) {
+            data16 = ((i16)OPT_1) << 8 | data16;
+        }
+
         if (out != NULL) {
             sprintf(out, "%s, %d",
                     W ? "ax" : "al",
                     W ? (((i16)OPT_1) << 8 | INSTR_LO) : (i8)INSTR_LO);
         }
+
+        decoded_construct->operands[0].type = OperandRegister;
+        decoded_construct->operands[0].reg.index = __D_REG_AX;
+        decoded_construct->operands[1].type = OperandImmediate;
+        decoded_construct->operands[1].imm.value = data16;
+        decoded_construct->is_wide = W;
     } else if (variant == OPV_IMM2REGMEM_SOURCEBIT) {
         const u8 S   = (instr & 0b0000001000000000) >> 9;
         const u8 REG = (instr & 0b0000000000111000) >> 3;
@@ -511,7 +537,14 @@ decode_cmp:
         case __D_MOD_R2R: {
             data = is_wide_data ? OPT_2 << 8 | OPT_1 : OPT_1;
             if (out != NULL)
-                sprintf(rm, "%s", ops[RM]);
+                regcode_to_str(RM, is_wide_data, rm);
+
+            decoded_construct->operands[0].type = OperandRegister;
+            decoded_construct->operands[0].reg.index = RM;
+            decoded_construct->operands[1].type = OperandImmediate;
+            decoded_construct->operands[1].imm.value = data;
+            decoded_construct->is_wide = is_wide_data;
+
             break;
         }
         }
@@ -795,9 +828,12 @@ u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
         return new_cursor;
     }
 
-    if (   (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, ILOOP))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, ILOOPZ))
-        || (matched_variant=OPV_JMP,  TEST_OP(INSTR_HI, ILOOPNZ))
+    if (   (decoded_construct->op_code=OP_LOOP,
+                matched_variant=OPV_JMP, TEST_OP(INSTR_HI, ILOOP))
+        || (decoded_construct->op_code=OP_LOOPZ,
+                matched_variant=OPV_JMP, TEST_OP(INSTR_HI, ILOOPZ))
+        || (decoded_construct->op_code=OP_LOOPNZ,
+                matched_variant=OPV_JMP, TEST_OP(INSTR_HI, ILOOPNZ))
        ) {
 #ifdef DEBUG
         printf("[LOOPS] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
@@ -814,9 +850,12 @@ u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
     }
 
     // Check for opcodes with the same value (other flags must differ)
-    if (   TEST_OP(INSTR_HI, IADD_IMM2REGMEM)
-        || TEST_OP(INSTR_HI, ISUB_IMM_FROM_REGMEM)
-        || TEST_OP(INSTR_HI, ICMP_IMM_WITH_REGMEM)) {
+    if (   (decoded_construct->op_code=OP_ADD_IMM2REGMEM,
+                TEST_OP(INSTR_HI, IADD_IMM2REGMEM))
+        || (decoded_construct->op_code=OP_SUB_IMM_FROM_REGMEM,
+                TEST_OP(INSTR_HI, ISUB_IMM_FROM_REGMEM))
+        || (decoded_construct->op_code=OP_CMP_IMM_WITH_REGMEM,
+                TEST_OP(INSTR_HI, ICMP_IMM_WITH_REGMEM))) {
         new_cursor = decode_params(context, decoded_construct, OPV_IMM2REGMEM_SOURCEBIT, new_cursor, params);
         const u8 bits_432 = (buf[cursor+1] >> 3) & 0b111;
 
@@ -829,7 +868,8 @@ u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
 #ifdef DEBUG
         printf("[ADD] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
-            sprintf(out, "add %s", params);
+            if (out != NULL)
+                sprintf(out, "add %s", params);
             decoded_construct->op_code = OP_ADD_IMM2REGMEM;
             break;
         case 0b101: // SUB

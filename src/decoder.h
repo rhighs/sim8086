@@ -1,8 +1,8 @@
 #ifndef DECODER_H
 #define DECODER_H
 
-#include "op_code.h"
 #include "types.h"
+#include "instruction.h"
 
 #define __D_REG_AL 0x0
 #define __D_REG_CL 0x1
@@ -31,31 +31,6 @@
 #define __D_NO_LABELS 64
 
 #define TEST_OP(OPCODE, AGAINST) ((OPCODE>>(8-opcode_len(AGAINST)))==(AGAINST>>(8-opcode_len(AGAINST))))
-
-/**
- * Defines operand types assigned by the decoder
- */
-typedef enum {
-    OperandRegister,
-    OperandImmediate
-} operand_register_type_t;
-
-typedef struct {
-    operand_register_type_t type;
-    union {
-        struct { u16 value; } imm;
-        struct { u8 index; } reg;
-    };
-} operand_t;
-
-/**
- * A simple decode unit
- */
-typedef struct {
-    operand_t operands[2];
-    u8 is_wide;
-    op_code_t op_code;
-} instruction_t;
 
 /**
  * Defines common parameters placements in opcodes such as mov, sub, add

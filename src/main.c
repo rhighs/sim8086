@@ -1,43 +1,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "processor.h"
 #include "decoder.h"
-
-typedef struct {
-    u16 registers[8];
-} processor_t;
-
-#define REG_AX 0
-#define REG_BX 3
-#define REG_CX 1
-#define REG_DX 2
-#define REG_SP 4
-#define REG_BP 5
-#define REG_SI 6
-#define REG_DI 7
-
-u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
-    const operand_t *operands = instruction.operands;
-    switch (instruction.op_code) {
-        case OP_MOV:
-        case OP_MOV_IMM2REG:
-        case OP_MOV_ACC2MEM:
-        case OP_MOV_IMM2REGMEM:
-        case OP_MOV_MEM2ACC:
-            if (instruction.operands[1].type == OperandImmediate) {
-                u8 reg = operands[0].reg.index;
-                u16 value = operands[1].imm.value;
-                cpu->registers[reg] = value;
-            } else if (operands[1].type == OperandRegister) {
-                u8 reg_dst = operands[0].reg.index;
-                u8 reg_src = operands[1].reg.index;
-                cpu->registers[reg_dst] = cpu->registers[reg_src];
-            }
-            break;
-    }
-
-    return 0;
-}
 
 i32 main(i32 argc, char *argv[]) {
     if (argc < 2)  {
@@ -66,8 +31,8 @@ i32 main(i32 argc, char *argv[]) {
     }
 
     u8 i = 0;
-    printf("CPU mem state:\nax\tbx\tcx\tdx\tsp\tbp\tsi\tdi\n"
-                           "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n", 
+    printf("CPU mem state:\n\tax\tbx\tcx\tdx\tsp\tbp\tsi\tdi\n"
+                           "\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n\n", 
             cpu.registers[REG_AX],
             cpu.registers[REG_BX],
             cpu.registers[REG_CX],
@@ -76,6 +41,10 @@ i32 main(i32 argc, char *argv[]) {
             cpu.registers[REG_BP],
             cpu.registers[REG_SI],
             cpu.registers[REG_DI]);
+
+    printf("CPU flags:\n\tZ\tS\n\t%d\t%d\n",
+            (cpu.flags & FLAG_ZERO) != 0,
+            (cpu.flags & FLAG_SIGN) != 0);
 
     return EXIT_SUCCESS;
 }
