@@ -1,3 +1,5 @@
+#include <assert.h>
+
 #include "processor.h"
 #include "instruction.h"
 #include "opcode.h"
@@ -10,6 +12,16 @@ void processor_set_flags(processor_t *cpu, u16 value) {
     } else if (value == 0) {
         flags |= FLAG_ZERO;
     }
+
+    u16 xor_value = value;
+    xor_value ^= xor_value >> 8;
+    xor_value ^= xor_value >> 4;
+    xor_value ^= xor_value >> 2;
+    xor_value ^= xor_value >> 1;
+    if (~xor_value & 1) {
+        flags |= FLAG_PARITY;
+    }
+
     cpu->flags = flags;
 }
 
@@ -100,5 +112,6 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
     return 0;
 
 unimplemented:
+    assert(0 && "Unimplemented instruction interpretation!");
     return 1;
 }

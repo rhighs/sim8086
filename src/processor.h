@@ -17,8 +17,10 @@
 #define U16_SIGN_BIT 0x8000
 
 typedef enum {
-    FLAG_ZERO = 0x1 << 0,
-    FLAG_SIGN = 0x1 << 1,
+    FLAG_ZERO       = 0x1 << 0,
+    FLAG_SIGN       = 0x1 << 1,
+    FLAG_PARITY     = 0x1 << 2,
+    FLAG_OVERFLOW   = 0x1 << 2,
 } flag_t;
 
 typedef struct {

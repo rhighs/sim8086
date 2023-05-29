@@ -42,9 +42,10 @@ i32 main(i32 argc, char *argv[]) {
             cpu.registers[REG_SI],
             cpu.registers[REG_DI]);
 
-    printf("CPU flags:\n\tZ\tS\n\t%d\t%d\n",
-            (cpu.flags & FLAG_ZERO) != 0,
-            (cpu.flags & FLAG_SIGN) != 0);
+    printf("CPU flags:\n\tZ\tS\tP\n\t%d\t%d\t%d\n",
+            (cpu.flags & FLAG_ZERO)     != 0,
+            (cpu.flags & FLAG_SIGN)     != 0,
+            (cpu.flags & FLAG_PARITY)   != 0);
 
     return EXIT_SUCCESS;
 }
