@@ -22,22 +22,24 @@ i32 main(i32 argc, char *argv[]) {
     u32 n_instructions = processor_init(&cpu, &decoder_ctx);
 
     while (1) {
+        if (cpu.ip == cpu.ip2instrno_len) {
+            break;
+        }
+
         // Fetch instruction
         instruction_t instruction = cpu.instructions[cpu.ip2instrno[cpu.ip]];
 
         u32 old_ip = cpu.ip;
         u32 exec_err = processor_exec(&cpu, instruction);
-        if (old_ip == cpu.ip) {
-            break;
-        }
 
         if (exec_err) {
             fprintf(stderr, "Failed execution of instruction at PC: %d\n", decoder_ctx.pc);
             break;
         }
-    }
 
-    for (u32 instr_idx=0; instr_idx<n_instructions; instr_idx++) {
+        if (old_ip == cpu.ip) {
+            break;
+        }
     }
 
     u8 i = 0;
@@ -52,9 +54,11 @@ i32 main(i32 argc, char *argv[]) {
             cpu.registers[REG_SI],
             cpu.registers[REG_DI]);
 
-    printf("CPU flags:\n\tZ\tS\tP\n\t%d\t%d\t%d\n",
+    printf("CPU flags:\n\tZ\tS\tO\tC\tP\n\t%d\t%d\t%d\t%d\t%d\n",
             (cpu.flags & FLAG_ZERO)     != 0,
             (cpu.flags & FLAG_SIGN)     != 0,
+            (cpu.flags & FLAG_OVERFLOW) != 0,
+            (cpu.flags & FLAG_CARRY)    != 0,
             (cpu.flags & FLAG_PARITY)   != 0);
 
     return EXIT_SUCCESS;

@@ -101,8 +101,25 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
             if(operands[1].type == OperandRegister) {
                 u8 reg_dst = operands[0].reg.index;
                 u8 reg_src = operands[1].reg.index;
-                u32 sum = (u32)(cpu->registers[reg_dst])
-                    + (u32)(cpu->registers[reg_src]);
+
+                u32 sum = 0;
+                if (instruction.is_wide) {
+                    const u16 value = cpu->registers[reg_src];
+                    const i16 value_sgn = operands[1].imm.value;
+                    sum = value_sgn < 0
+                        ? (u32)(cpu->registers[reg_dst])
+                                - (u32)(abs(value_sgn))
+                        : (u32)(cpu->registers[reg_dst])
+                                + (u32)(value);
+                } else {
+                    const u8 value = operands[1].imm.value;
+                    const i8 value_sgn = operands[1].imm.value;
+                    sum = value_sgn < 0
+                        ? (u32)(cpu->registers[reg_dst])
+                                - (u32)(abs((i8)(value_sgn)))
+                        : (u32)(cpu->registers[reg_dst])
+                                + (u32)(value);
+                }
 
                 cpu->registers[reg_dst] = (u16)sum;
                 processor_set_flags(cpu, (u16)sum);
@@ -118,8 +135,25 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         case OP_ADD_IMM2REGMEM:
             if(operands[1].type == OperandImmediate) {
                 u8 reg = operands[0].reg.index;
-                u32 sum = (u32)(cpu->registers[reg])
-                    + (u32)(operands[1].imm.value);
+
+                u32 sum = 0;
+                if (instruction.is_wide) {
+                    const u16 value = operands[1].imm.value;
+                    const i16 value_sgn = operands[1].imm.value;
+                    sum = value_sgn < 0
+                        ? (u32)(cpu->registers[reg])
+                                - (u32)(abs(value_sgn))
+                        : (u32)(cpu->registers[reg])
+                                + (u32)(value);
+                } else {
+                    const u8 value = operands[1].imm.value;
+                    const i8 value_sgn = operands[1].imm.value;
+                    sum = value_sgn < 0
+                        ? (u32)(cpu->registers[reg])
+                                - (u32)(abs((i8)(value_sgn)))
+                        : (u32)(cpu->registers[reg])
+                                + (u32)(value);
+                }
 
                 cpu->registers[reg] = (u16)sum;
                 processor_set_flags(cpu, (u16)sum);
