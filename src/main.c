@@ -21,11 +21,23 @@ i32 main(i32 argc, char *argv[]) {
 
     u32 n_instructions = processor_init(&cpu, &decoder_ctx);
 
-    for (u32 instr_idx=0; instr_idx<n_instructions; instr_idx++) {
-        if (processor_exec(&cpu, cpu.instructions[instr_idx])) {
-            fprintf(stderr, "Failed exection of instruction at PC: %d\n", decoder_ctx.pc);
+    while (1) {
+        // Fetch instruction
+        instruction_t instruction = cpu.instructions[cpu.ip2instrno[cpu.ip]];
+
+        u32 old_ip = cpu.ip;
+        u32 exec_err = processor_exec(&cpu, instruction);
+        if (old_ip == cpu.ip) {
             break;
         }
+
+        if (exec_err) {
+            fprintf(stderr, "Failed execution of instruction at PC: %d\n", decoder_ctx.pc);
+            break;
+        }
+    }
+
+    for (u32 instr_idx=0; instr_idx<n_instructions; instr_idx++) {
     }
 
     u8 i = 0;

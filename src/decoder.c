@@ -257,6 +257,10 @@ u32 decode_jmps(decoder_context_t *context, instruction_t *decoded_construct,
                 label_idx++);
         if (out != NULL)
             sprintf(out, "%s", jmp_locations.labels[label_idx]);
+
+        decoded_construct->operands[0].type = OperandImmediate;
+        decoded_construct->operands[0].imm.value = displacement_sgn;
+        decoded_construct->is_wide = 0;
         break;
     }
     default: return new_cursor;
