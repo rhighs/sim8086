@@ -1,9 +1,38 @@
 #include <assert.h>
+#include <stdlib.h>
+#include <memory.h>
 
+#include "decoder.h"
 #include "processor.h"
 #include "instruction.h"
 #include "opcode.h"
 #include "types.h"
+
+u32 processor_init(processor_t *cpu, decoder_context_t *decoder_ctx) {
+    u32 instructions_size = decoder_ctx->buflen * sizeof(instruction_t);
+
+    cpu->instructions = (instruction_t *)malloc(instructions_size);
+    memset(cpu->instructions, 0, instructions_size);
+
+    u32 ip2instrno_size = decoder_ctx->buflen* sizeof(u32);
+    cpu->ip2instrno = (u32 *)malloc(ip2instrno_size);
+
+    u32 n_decoded = 0;
+    for (u32 ip=0;
+         ip < decoder_ctx->buflen;
+         ip += 2) {
+
+        instruction_t decoded = { 0 };
+        ip = decode(decoder_ctx, &decoded, ip, NULL);
+        assert(ip < decoder_ctx->buflen && "new IP value must be within buffer bounds");
+
+        cpu->instructions[n_decoded] = decoded;
+        cpu->ip2instrno[ip] = n_decoded;
+        n_decoded += 1;
+    }
+
+    return n_decoded;
+}
 
 void processor_set_flags(processor_t *cpu, u16 value) {
     u8 flags = 0;
@@ -34,7 +63,6 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
                 u8 reg_dst = operands[0].reg.index;
                 u8 reg_src = operands[1].reg.index;
                 cpu->registers[reg_dst] = cpu->registers[reg_src];
-                // processor_set_flags(cpu, cpu->registers[reg_dst]);
             }
             break;
         case OP_MOV_IMM2REG:
@@ -42,7 +70,6 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
                 u8 reg = operands[0].reg.index;
                 u16 value = operands[1].imm.value;
                 cpu->registers[reg] = value;
-                // processor_set_flags(cpu, value);
             }
             break;
         case OP_MOV_ACC2MEM:
@@ -106,6 +133,25 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
                 u16 sum = cpu->registers[reg_dst] - cpu->registers[reg_src];
                 processor_set_flags(cpu, sum);
             }
+            break;
+        case OP_JE:
+        case OP_JL:
+        case OP_JLE:
+        case OP_JB:
+        case OP_JBE:
+        case OP_JP:
+        case OP_JO:
+        case OP_JS:
+        case OP_JNE:
+        case OP_JNL:
+        case OP_JNLE:
+        case OP_JNB:
+        case OP_JNBE:
+        case OP_JNP:
+        case OP_JNO:
+        case OP_JNS:
+        case OP_JCXZ:
+            goto unimplemented;
             break;
     }
 

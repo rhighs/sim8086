@@ -19,12 +19,10 @@ i32 main(i32 argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    for (u32 cursor=0; cursor<nread; cursor+=2) {
-        instruction_t decoded = { 0 };
+    u32 n_instructions = processor_init(&cpu, &decoder_ctx);
 
-        cursor = decode(&decoder_ctx, &decoded, cursor, NULL);
-
-        if (processor_exec(&cpu, decoded)) {
+    for (u32 instr_idx=0; instr_idx<n_instructions; instr_idx++) {
+        if (processor_exec(&cpu, cpu.instructions[instr_idx])) {
             fprintf(stderr, "Failed exection of instruction at PC: %d\n", decoder_ctx.pc);
             break;
         }
