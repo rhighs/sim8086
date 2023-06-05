@@ -4,6 +4,15 @@
 #include "types.h"
 #include "instruction.h"
 
+#define __D_RM_BX_SI    0x0
+#define __D_RM_BX_DI    0x1
+#define __D_RM_BP_SI    0x2
+#define __D_RM_BP_DI    0x3
+#define __D_RM_SI       0x4
+#define __D_RM_DI       0x5
+#define __D_RM_BP       0x6
+#define __D_RM_BX       0x7
+
 #define __D_REG_AL 0x0
 #define __D_REG_CL 0x1
 #define __D_REG_DL 0x2

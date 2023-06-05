@@ -6,7 +6,11 @@
 
 typedef enum {
     OperandRegister,
-    OperandImmediate
+    OperandImmediate,
+    OperandMemory, 
+    OperandMemoryOffset,
+    OperandMemoryOffset8,
+    OperandMemoryOffset16,
 } operand_register_type_t;
 
 typedef struct {
@@ -14,6 +18,11 @@ typedef struct {
     union {
         struct { u16 value; } imm;
         struct { u8 index; } reg;
+        struct {
+            u8 n_regs;
+            u16 offset;
+            u8 regs[2];
+        } offset;
     };
 } operand_t;
 

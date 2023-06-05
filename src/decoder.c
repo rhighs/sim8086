@@ -208,7 +208,7 @@ void jmp_set(u32 location) {
     jmp_locations.len += 1;
 }
 
-u32 decode_jmps(decoder_context_t *context, instruction_t *decoded_construct,
+u32 decode_jmps(decoder_context_t *context, instruction_t *decoded,
         const u32 cursor, const u8 jmp_code, char *out) { 
 
     const u8 *buf = context->buf;
@@ -258,15 +258,15 @@ u32 decode_jmps(decoder_context_t *context, instruction_t *decoded_construct,
         if (out != NULL)
             sprintf(out, "%s", jmp_locations.labels[label_idx]);
 
-        decoded_construct->operands[0].type = OperandImmediate;
-        decoded_construct->operands[0].imm.value = displacement_sgn;
-        decoded_construct->is_wide = 0;
+        decoded->operands[0].type = OperandImmediate;
+        decoded->operands[0].imm.value = displacement_sgn;
+        decoded->is_wide = 0;
         break;
     }
     default: return new_cursor;
     }
 
-    decoded_construct->op_code = op_code;
+    decoded->op_code = op_code;
 
     return new_cursor;
 }
@@ -277,7 +277,52 @@ u32 decode_loops(const u8 *buf, const u32 cursor,
     return cursor;
 }
 
-u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
+static
+void decode_rm_complex_operand(operand_t *operand, const u8 RM,
+        const u8 has_direct) {
+    switch (RM) {
+    case __D_RM_BX_SI:
+        operand->offset.n_regs = 2;
+        operand->offset.regs[0] = __D_REG_BX;
+        operand->offset.regs[1] = __D_REG_SI;
+        break;
+    case __D_RM_BX_DI:
+        operand->offset.n_regs = 2;
+        operand->offset.regs[0] = __D_REG_BX;
+        operand->offset.regs[1] = __D_REG_DI;
+        break;
+    case __D_RM_BP_SI:
+        operand->offset.n_regs = 2;
+        operand->offset.regs[0] = __D_REG_BP;
+        operand->offset.regs[1] = __D_REG_SI;
+        break;
+    case __D_RM_BP_DI:
+        operand->offset.n_regs = 2;
+        operand->offset.regs[0] = __D_REG_BP;
+        operand->offset.regs[1] = __D_REG_DI;
+        break;
+    case __D_RM_SI:
+        operand->offset.n_regs = 1;
+        operand->offset.regs[0] = __D_REG_SI;
+        break;
+    case __D_RM_DI:
+        operand->offset.n_regs = 1;
+        operand->offset.regs[0] = __D_REG_DI;
+        break;
+    case __D_RM_BX:
+        operand->offset.n_regs = 1;
+        operand->offset.regs[0] = __D_REG_BX;
+        break;
+    default:
+        if (!has_direct && RM == __D_RM_BP) {
+            operand->offset.n_regs = 1;
+            operand->offset.regs[0] = __D_REG_BP;
+            break;
+        }
+    }
+}
+
+u32 decode_params(decoder_context_t *context, instruction_t *decoded,
         op_variants_t variant, const u32 cursor, char *out) {
 
     const u8 *buf = context->buf;
@@ -310,11 +355,14 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
             new_cursor += 1;
         }
 
-        decoded_construct->operands[0].type = OperandRegister;
-        decoded_construct->operands[0].reg.index = __D_REG_AX;
-        decoded_construct->operands[1].type = OperandImmediate;
-        decoded_construct->operands[1].imm.value = data16;
-        decoded_construct->is_wide = W;
+        operand_t *source_operand = &(decoded->operands[1]);
+        operand_t *destination_operand = &(decoded->operands[0]);
+
+        destination_operand->type = OperandRegister;
+        destination_operand->reg.index = __D_REG_AX;
+        source_operand->type = OperandImmediate;
+        source_operand->imm.value = data16;
+        decoded->is_wide = W;
 
         if (out != NULL)
             sprintf(out, "%s, %d", W ? "ax" : "al", W ? data16 : data8);
@@ -336,11 +384,15 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
             new_cursor += 1;
         }
 
-        decoded_construct->operands[0].type = OperandRegister;
-        decoded_construct->operands[0].reg.index = REG;
-        decoded_construct->is_wide = W;
-        decoded_construct->operands[1].type = OperandImmediate;
-        decoded_construct->operands[1].imm.value = data16;
+        decoded->is_wide = W;
+
+        operand_t *source_operand = &(decoded->operands[1]);
+        operand_t *destination_operand = &(decoded->operands[0]);
+
+        destination_operand->type = OperandRegister;
+        destination_operand->reg.index = REG;
+        source_operand->type = OperandImmediate;
+        source_operand->imm.value = data16;
 
 #ifdef DEBUG
         printf("DATA-8: "); __print_bits(data8);
@@ -356,6 +408,17 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
             addr = addr_hi | addr_lo;
             new_cursor += 1;
         }
+
+        operand_t *source_operand = &(decoded->operands[1]);
+        operand_t *destination_operand = &(decoded->operands[0]);
+
+        decoded->is_wide = W;
+        destination_operand->type = OperandMemory;
+        destination_operand->offset.n_regs = 0;
+        destination_operand->offset.offset = addr;
+        source_operand->type = OperandRegister;
+        source_operand->reg.index = __D_REG_AX;
+
         if (out != NULL)
             sprintf(out, "[%d], ax", addr);
     } else if (variant == OPV_MEM2ACC) {
@@ -367,6 +430,17 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
             addr = addr_hi | addr_lo;
             new_cursor += 1;
         }
+
+        operand_t *source_operand = &(decoded->operands[1]);
+        operand_t *destination_operand = &(decoded->operands[0]);
+
+        decoded->is_wide = W;
+        destination_operand->type = OperandRegister;
+        destination_operand->reg.index = __D_REG_AX;
+        source_operand->type = OperandMemory;
+        source_operand->offset.n_regs = 0;
+        source_operand->offset.offset = addr;
+
         if (out != NULL)
             sprintf(out, "ax, [%d]", addr);
     } else if (variant == OPV_IMM2REGMEM) {
@@ -407,6 +481,11 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
         if (cmp_decoding) 
             goto decode_cmp;
 
+        decoded->is_wide = W;
+
+        operand_t *destination_operand = &(decoded->operands[0]);
+        operand_t *source_operand = &(decoded->operands[1]);
+
         switch (MOD) {
         case __D_MOD_RM: {
             if (RM == __D_RM_DIRECT) {
@@ -415,10 +494,17 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
                 data = W ? OPT_4 << 8 | OPT_3 : OPT_3;
                 if (out != NULL)
                     sprintf(rm, "[%d]", addr);
+
+                source_operand->type = OperandMemory;
+                source_operand->offset.n_regs = 0;
+                source_operand->offset.offset = addr;
             } else {
                 data = W ? OPT_2 << 8 | OPT_1 : OPT_1;
                 if (out != NULL)
                     sprintf(rm, "[%s]", ops[RM]);
+
+                source_operand->type = OperandMemoryOffset;
+                decode_rm_complex_operand(source_operand, RM, TRUE);
             }
             break;
         }
@@ -428,6 +514,11 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
             char addr_sign = addr < 0 ? '-' : '+';
             if (out != NULL)
                 sprintf(rm, "[%s %c %d]", ops[RM], addr_sign, abs(addr));
+
+            source_operand->type = OperandMemoryOffset8;
+            decode_rm_complex_operand(source_operand, RM, FALSE);
+            source_operand->offset.offset = addr;
+
             new_cursor += 1; break;
         }
         case __D_MOD_RM_OFF16: {
@@ -436,6 +527,11 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
             char addr_sign = addr < 0 ? '-' : '+';
             if (out != NULL)
                 sprintf(rm, "[%s %c %d]", ops[RM], addr_sign, abs(addr));
+
+            source_operand->type = OperandMemoryOffset16;
+            decode_rm_complex_operand(source_operand, RM, FALSE);
+            source_operand->offset.offset = addr;
+
             new_cursor += 2; break;
         }
         case __D_MOD_R2R: {
@@ -443,14 +539,15 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
             if (out != NULL)
                 regcode_to_str(RM, W, rm);
 
-            decoded_construct->operands[0].type = OperandRegister;
-            decoded_construct->operands[0].reg.index = RM;
-            decoded_construct->operands[1].type = OperandImmediate;
-            decoded_construct->operands[1].imm.value = data;
-            decoded_construct->is_wide = W;
+            destination_operand->type = OperandRegister;
+            destination_operand->reg.index = RM;
             break;
         }
         }
+
+        source_operand->type = OperandImmediate;
+        source_operand->imm.value = data;
+
         if (out != NULL)
             sprintf(out, "%s, %s %d", rm, W ? "word" : "byte", data);
         // There's always at least one additinal byte for 8-bit [data]
@@ -469,11 +566,11 @@ decode_cmp:
                     W ? (((i16)OPT_1) << 8 | INSTR_LO) : (i8)INSTR_LO);
         }
 
-        decoded_construct->operands[0].type = OperandRegister;
-        decoded_construct->operands[0].reg.index = __D_REG_AX;
-        decoded_construct->operands[1].type = OperandImmediate;
-        decoded_construct->operands[1].imm.value = data16;
-        decoded_construct->is_wide = W;
+        decoded->operands[0].type = OperandRegister;
+        decoded->operands[0].reg.index = __D_REG_AX;
+        decoded->operands[1].type = OperandImmediate;
+        decoded->operands[1].imm.value = data16;
+        decoded->is_wide = W;
     } else if (variant == OPV_IMM2REGMEM_SOURCEBIT) {
         const u8 S   = (instr & 0b0000001000000000) >> 9;
         const u8 REG = (instr & 0b0000000000111000) >> 3;
@@ -506,6 +603,11 @@ decode_cmp:
             new_cursor += 1;
         }
 
+        decoded->is_wide = is_wide_data;
+
+        operand_t *destination_operand = &(decoded->operands[0]);
+        operand_t *source_operand = &(decoded->operands[1]);
+
         i16 data = 0;
         switch (MOD) {
         case __D_MOD_RM: {
@@ -515,10 +617,17 @@ decode_cmp:
                 data = is_wide_data ? OPT_4 << 8 | OPT_3 : OPT_3;
                 if (out != NULL)
                     sprintf(rm, "[%d]", addr);
+
+                source_operand->type = OperandMemory;
+                source_operand->offset.n_regs = 0;
+                source_operand->offset.offset = addr;
             } else {
                 data = is_wide_data ? OPT_2 << 8 | OPT_1 : OPT_1;
                 if (out != NULL)
                     sprintf(rm, "[%s]", ops[RM]);
+
+                source_operand->type = OperandMemoryOffset;
+                decode_rm_complex_operand(source_operand, RM, TRUE);
             }
             break;
         }
@@ -528,7 +637,12 @@ decode_cmp:
             char addr_sign = addr < 0 ? '-' : '+';
             if (out != NULL)
                 sprintf(rm, "[%s %c %d]", ops[RM], addr_sign, abs(addr));
-            new_cursor += 1; break;
+
+            source_operand->type = OperandMemoryOffset8;
+            decode_rm_complex_operand(source_operand, RM, FALSE);
+            source_operand->offset.offset = addr;
+            new_cursor += 1;
+            break;
         }
         case __D_MOD_RM_OFF16: {
             i16 addr = OPT_2 << 8 | OPT_1;
@@ -536,22 +650,26 @@ decode_cmp:
             char addr_sign = addr < 0 ? '-' : '+';
             if (out != NULL)
                 sprintf(rm, "[%s %c %d]", ops[RM], addr_sign, abs(addr));
-            new_cursor += 2; break;
+
+            source_operand->type = OperandMemoryOffset16;
+            decode_rm_complex_operand(source_operand, RM, FALSE);
+            source_operand->offset.offset = addr;
+            new_cursor += 2;
+            break;
         }
         case __D_MOD_R2R: {
             data = is_wide_data ? OPT_2 << 8 | OPT_1 : OPT_1;
             if (out != NULL)
                 regcode_to_str(RM, is_wide_data, rm);
 
-            decoded_construct->operands[0].type = OperandRegister;
-            decoded_construct->operands[0].reg.index = RM;
-            decoded_construct->operands[1].type = OperandImmediate;
-            decoded_construct->operands[1].imm.value = data;
-            decoded_construct->is_wide = is_wide_data;
-
+            destination_operand->type = OperandRegister;
+            destination_operand->reg.index = RM;
             break;
         }
         }
+
+        source_operand->type = OperandImmediate;
+        source_operand->imm.value = data;
 
         if (out != NULL)
             sprintf(out, "%s, %s %d", rm, W ? "word" : "byte", data);
@@ -575,6 +693,9 @@ decode_cmp:
         printf("\n");
 #endif
 
+        operand_t *destination_operand = &(decoded->operands[0]);
+        operand_t *source_operand = &(decoded->operands[1]);
+
         switch (MOD) {
         case __D_MOD_R2R: {
             regcode_to_str(REG, W, reg);
@@ -588,74 +709,143 @@ decode_cmp:
             u8 to = D ? REG : RM;
             u8 from = D ? RM : REG;
 
-            decoded_construct->operands[0].type = OperandRegister;
-            decoded_construct->operands[0].reg.index = to;
-            decoded_construct->operands[1].type = OperandRegister;
-            decoded_construct->operands[1].reg.index = from;
-            decoded_construct->is_wide = W;
+            destination_operand->type = OperandRegister;
+            destination_operand->reg.index = to;
+            source_operand->type = OperandRegister;
+            source_operand->reg.index = from;
+            decoded->is_wide = W;
 
             break;
         }
         
         case __D_MOD_RM: {
+            operand_t memory_operand;
+            operand_t register_operand;
+
             if (RM == __D_RM_DIRECT) {
                 u16 hi = (u16)(buf[cursor + 3]) << 8;
                 u16 lo = (u16)(buf[cursor + 2]);
-                u16 wide = hi | lo;
+                u16 addr = hi | lo;
                 if (out != NULL)
-                    sprintf(rm, "[%d]", wide);
+                    sprintf(rm, "[%d]", addr);
+
+                memory_operand.type = OperandMemory;
+                memory_operand.offset.n_regs = 0;
+                memory_operand.offset.offset = addr;
+
                 new_cursor += 2;
             } else {
                 if (out != NULL)
                     sprintf(rm, "[%s]", ops[RM]);
+
+                memory_operand.type = OperandMemory;
+                decode_rm_complex_operand(&memory_operand, RM, TRUE);
             }
 
             regcode_to_str(REG, W, reg);
 
-            const char* source = D ? rm : reg;
-            const char* destination = D ? reg : rm;
-            if (out != NULL)
+            register_operand.type = OperandRegister;
+            register_operand.reg.index = REG;
+
+            const operand_t source_operand_value = D
+                ? memory_operand
+                : register_operand;
+            const operand_t destination_operand_value = D
+                ? register_operand
+                : memory_operand;
+
+            *destination_operand = destination_operand_value;
+            *source_operand = source_operand_value;
+
+            if (out != NULL) {
+                const char* source = D ? rm : reg;
+                const char* destination = D ? reg : rm;
                 sprintf(out, "%s, %s", destination, source);
+            }
+
             break;
         }
 
         case __D_MOD_RM_OFF8: {
+            operand_t memory_operand;
+            operand_t register_operand;
+
             const i8 byte = (u16)(buf[cursor + 2]);
+            new_cursor += 1;
+
+            memory_operand.type = OperandMemory;
+            decode_rm_complex_operand(&memory_operand, RM, TRUE);
+            memory_operand.offset.offset = byte;
+            decoded->is_wide = FALSE;
+
+            register_operand.type = OperandRegister;
+            register_operand.reg.index = REG;
+
+            const operand_t source_operand_value = D
+                ? memory_operand
+                : register_operand;
+            const operand_t destination_operand_value = D
+                ? register_operand
+                : memory_operand;
+
+            *destination_operand  = destination_operand_value;
+            *source_operand = source_operand_value;
+
             if (out != NULL) {
+                regcode_to_str(REG, W, reg);
+
                 if (byte == 0) {
                     sprintf(rm, "[%s]", ops[RM]);
                 } else {
                     char byte_sign = byte < 0 ? '-' : '+';
                     sprintf(rm, "[%s %c %d]", ops[RM], byte_sign, abs(byte));
                 }
-            }
-            new_cursor += 1;
 
-            regcode_to_str(REG, W, reg);
-
-            const char* source = D ? rm : reg;
-            const char* destination = D ? reg : rm;
-            if (out != NULL)
+                const char* source = D ? rm : reg;
+                const char* destination = D ? reg : rm;
                 sprintf(out, "%s, %s", destination, source);
+            }
+
             break;
         }
 
         case __D_MOD_RM_OFF16: {
+            operand_t memory_operand;
+            operand_t register_operand;
+
             i16 hi = (u16)(buf[cursor + 3]) << 8;
             i16 lo = (u16)(buf[cursor + 2]);
             i16 data = hi | lo;
             const i16 wide = (data >> 8) | (data << 8);
             char wide_sign = wide < 0 ? '-' : '+';
-            if (out != NULL)
-                sprintf(rm, "[%s %c %d]", ops[RM], wide_sign, abs(wide));
             new_cursor += 2;
 
-            regcode_to_str(REG, W, reg);
+            memory_operand.type = OperandMemory;
+            decode_rm_complex_operand(&memory_operand, RM, TRUE);
+            memory_operand.offset.offset = data;
+            decoded->is_wide = TRUE;
 
-            const char* source = D ? rm : reg;
-            const char* destination = D ? reg : rm;
-            if (out != NULL)
+            register_operand.type = OperandRegister;
+            register_operand.reg.index = REG;
+
+            const operand_t source_operand_value = D
+                ? memory_operand
+                : register_operand;
+            const operand_t destination_operand_value = D
+                ? register_operand
+                : memory_operand;
+
+            *destination_operand = destination_operand_value;
+            *source_operand = source_operand_value;
+
+            if (out != NULL) {
+                const char* source = D ? rm : reg;
+                const char* destination = D ? reg : rm;
+                regcode_to_str(REG, W, reg);
+                sprintf(rm, "[%s %c %d]", ops[RM], wide_sign, abs(wide));
                 sprintf(out, "%s, %s", destination, source);
+            }
+
             break;
         }
         }
@@ -665,7 +855,7 @@ decode_cmp:
     return new_cursor;
 }
 
-u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
+u32 decode(decoder_context_t *context, instruction_t *decoded,
         const u32 cursor, char *out) {
 
     const u8 *buf = context->buf;
@@ -691,21 +881,21 @@ u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
 
     char params[32] = {0};
     op_variants_t matched_variant;
-    if (   (decoded_construct->op_code=OP_MOV_IMM2REG,
+    if (   (decoded->op_code=OP_MOV_IMM2REG,
                 matched_variant=OPV_IMM2REG, TEST_OP(INSTR_HI, IMOV_IMM2REG))   
-        || (decoded_construct->op_code=OP_MOV_ACC2MEM, 
+        || (decoded->op_code=OP_MOV_ACC2MEM, 
                 matched_variant=OPV_ACC2MEM, TEST_OP(INSTR_HI, IMOV_ACC2MEM))  
-        || (decoded_construct->op_code=OP_MOV_MEM2ACC, 
+        || (decoded->op_code=OP_MOV_MEM2ACC, 
                 matched_variant=OPV_MEM2ACC, TEST_OP(INSTR_HI, IMOV_MEM2ACC))  
-        || (decoded_construct->op_code=OP_MOV_IMM2REGMEM,
+        || (decoded->op_code=OP_MOV_IMM2REGMEM,
                 matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_HI, IMOV_IMM2REGMEM))
-        || (decoded_construct->op_code=OP_MOV, 
+        || (decoded->op_code=OP_MOV, 
                 matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IMOV))           
         ) {
 #ifdef DEBUG
         printf("[MOV] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
 #endif
-        new_cursor = decode_params(context, decoded_construct,
+        new_cursor = decode_params(context, decoded,
                 matched_variant, cursor, params);
         if (out != NULL) 
             sprintf(out, "mov %s", params);
@@ -724,15 +914,15 @@ u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
             TEST_OP(INSTR_HI, IADD));
 #endif
 
-    if (   (decoded_construct->op_code=OP_ADD_IMM2ACC,
+    if (   (decoded->op_code=OP_ADD_IMM2ACC,
                 matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, IADD_IMM2ACC))
-        || (decoded_construct->op_code=OP_ADD,
+        || (decoded->op_code=OP_ADD,
                 matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IADD))
         ) {
 #ifdef DEBUG
         printf("[ADD] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
 #endif
-        new_cursor = decode_params(context, decoded_construct, matched_variant, cursor, params);
+        new_cursor = decode_params(context, decoded, matched_variant, cursor, params);
         if (out != NULL) 
             sprintf(out, "add %s", params);
 
@@ -747,15 +937,15 @@ u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
     printf("TEST_OP(INSTR_HI, ISUB):                  %d\n", TEST_OP(INSTR_HI, ISUB));
 #endif
 
-    if (   (decoded_construct->op_code=OP_SUB_IMM_FROM_ACC,
+    if (   (decoded->op_code=OP_SUB_IMM_FROM_ACC,
                 matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, ISUB_IMM_FROM_ACC))
-        || (decoded_construct->op_code=OP_SUB,
+        || (decoded->op_code=OP_SUB,
                 matched_variant=OPV_BASE, TEST_OP(INSTR_HI, ISUB))
         ) {
 #ifdef DEBUG
         printf("[SUB] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
 #endif
-        new_cursor = decode_params(context, decoded_construct, matched_variant, cursor, params);
+        new_cursor = decode_params(context, decoded, matched_variant, cursor, params);
         if (out != NULL) 
             sprintf(out, "sub %s", params);
 
@@ -772,15 +962,15 @@ u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
 
     const u8 bits_432 = (buf[cursor+1] >> 3) & 0b111;
 
-    if (   (decoded_construct->op_code=OP_CMP_IMM_WITH_ACC,
+    if (   (decoded->op_code=OP_CMP_IMM_WITH_ACC,
                 matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_HI, ICMP_IMM_WITH_ACC))
-        || (decoded_construct->op_code=OP_CMP_REGMEM_REG,
+        || (decoded->op_code=OP_CMP_REGMEM_REG,
                 matched_variant=OPV_BASE, TEST_OP(INSTR_HI, ICMP_REGMEM_REG))
         ) {
 #ifdef DEBUG
         printf("[CMP] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
 #endif
-        new_cursor = decode_params(context, decoded_construct, matched_variant, cursor, params);
+        new_cursor = decode_params(context, decoded, matched_variant, cursor, params);
         if (out != NULL) 
             sprintf(out, "cmp %s", params);
 
@@ -790,31 +980,31 @@ u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
     }
 
     u8 matched_jmp_code;
-    if (   (decoded_construct->op_code=OP_JMP_DIRECT_SEG,
+    if (   (decoded->op_code=OP_JMP_DIRECT_SEG,
                 TEST_OP(INSTR_HI, IJMP_DIRECT_SEG))
-        || (decoded_construct->op_code=OP_JMP_DIRECT_SEG_SHORT,
+        || (decoded->op_code=OP_JMP_DIRECT_SEG_SHORT,
                 TEST_OP(INSTR_HI, IJMP_DIRECT_SEG_SHORT))
-        || (decoded_construct->op_code=OP_JMP_INDIRECT_SEG,
+        || (decoded->op_code=OP_JMP_INDIRECT_SEG,
                 TEST_OP(INSTR_HI, IJMP_INDIRECT_SEG))
-        || (decoded_construct->op_code=OP_JMP_DIRECT_INTER_SEG,
+        || (decoded->op_code=OP_JMP_DIRECT_INTER_SEG,
                 TEST_OP(INSTR_HI, IJMP_DIRECT_INTER_SEG))
-        || (decoded_construct->op_code=OP_JE,      TEST_OP(INSTR_HI, IJE))
-        || (decoded_construct->op_code=OP_JL,      TEST_OP(INSTR_HI, IJL))
-        || (decoded_construct->op_code=OP_JLE,     TEST_OP(INSTR_HI, IJLE))
-        || (decoded_construct->op_code=OP_JB,      TEST_OP(INSTR_HI, IJB))
-        || (decoded_construct->op_code=OP_JBE,     TEST_OP(INSTR_HI, IJBE))
-        || (decoded_construct->op_code=OP_JP,      TEST_OP(INSTR_HI, IJP))
-        || (decoded_construct->op_code=OP_JO,      TEST_OP(INSTR_HI, IJO))
-        || (decoded_construct->op_code=OP_JS,      TEST_OP(INSTR_HI, IJS))
-        || (decoded_construct->op_code=OP_JNE,     TEST_OP(INSTR_HI, IJNE))
-        || (decoded_construct->op_code=OP_JNL,     TEST_OP(INSTR_HI, IJNL))
-        || (decoded_construct->op_code=OP_JNLE,    TEST_OP(INSTR_HI, IJNLE))
-        || (decoded_construct->op_code=OP_JNB,     TEST_OP(INSTR_HI, IJNB))
-        || (decoded_construct->op_code=OP_JNBE,    TEST_OP(INSTR_HI, IJNBE))
-        || (decoded_construct->op_code=OP_JNP,     TEST_OP(INSTR_HI, IJNP))
-        || (decoded_construct->op_code=OP_JNO,     TEST_OP(INSTR_HI, IJNO))
-        || (decoded_construct->op_code=OP_JNS,     TEST_OP(INSTR_HI, IJNS))
-        || (decoded_construct->op_code=OP_JCXZ,    TEST_OP(INSTR_HI, IJCXZ))) {
+        || (decoded->op_code=OP_JE,      TEST_OP(INSTR_HI, IJE))
+        || (decoded->op_code=OP_JL,      TEST_OP(INSTR_HI, IJL))
+        || (decoded->op_code=OP_JLE,     TEST_OP(INSTR_HI, IJLE))
+        || (decoded->op_code=OP_JB,      TEST_OP(INSTR_HI, IJB))
+        || (decoded->op_code=OP_JBE,     TEST_OP(INSTR_HI, IJBE))
+        || (decoded->op_code=OP_JP,      TEST_OP(INSTR_HI, IJP))
+        || (decoded->op_code=OP_JO,      TEST_OP(INSTR_HI, IJO))
+        || (decoded->op_code=OP_JS,      TEST_OP(INSTR_HI, IJS))
+        || (decoded->op_code=OP_JNE,     TEST_OP(INSTR_HI, IJNE))
+        || (decoded->op_code=OP_JNL,     TEST_OP(INSTR_HI, IJNL))
+        || (decoded->op_code=OP_JNLE,    TEST_OP(INSTR_HI, IJNLE))
+        || (decoded->op_code=OP_JNB,     TEST_OP(INSTR_HI, IJNB))
+        || (decoded->op_code=OP_JNBE,    TEST_OP(INSTR_HI, IJNBE))
+        || (decoded->op_code=OP_JNP,     TEST_OP(INSTR_HI, IJNP))
+        || (decoded->op_code=OP_JNO,     TEST_OP(INSTR_HI, IJNO))
+        || (decoded->op_code=OP_JNS,     TEST_OP(INSTR_HI, IJNS))
+        || (decoded->op_code=OP_JCXZ,    TEST_OP(INSTR_HI, IJCXZ))) {
         // decode jumps
 #ifdef DEBUG
         printf("[JUMPS] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
@@ -823,7 +1013,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
         const char* instr_str = instr2str(INSTR_HI, NONE);
         assert((instr_str[0] == 'j' || instr_str[0] == 'n')
                 && "instruction name must start with either 'j' or 'n'");
-        new_cursor = decode_jmps(context, decoded_construct, cursor, INSTR_HI, params);
+        new_cursor = decode_jmps(context, decoded, cursor, INSTR_HI, params);
         if (out != NULL) 
             sprintf(out, "%s %s", instr2str(INSTR_HI, 0), params);
 
@@ -832,11 +1022,11 @@ u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
         return new_cursor;
     }
 
-    if (   (decoded_construct->op_code=OP_LOOP,
+    if (   (decoded->op_code=OP_LOOP,
                 matched_variant=OPV_JMP, TEST_OP(INSTR_HI, ILOOP))
-        || (decoded_construct->op_code=OP_LOOPZ,
+        || (decoded->op_code=OP_LOOPZ,
                 matched_variant=OPV_JMP, TEST_OP(INSTR_HI, ILOOPZ))
-        || (decoded_construct->op_code=OP_LOOPNZ,
+        || (decoded->op_code=OP_LOOPNZ,
                 matched_variant=OPV_JMP, TEST_OP(INSTR_HI, ILOOPNZ))
        ) {
 #ifdef DEBUG
@@ -854,13 +1044,13 @@ u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
     }
 
     // Check for opcodes with the same value (other flags must differ)
-    if (   (decoded_construct->op_code=OP_ADD_IMM2REGMEM,
+    if (   (decoded->op_code=OP_ADD_IMM2REGMEM,
                 TEST_OP(INSTR_HI, IADD_IMM2REGMEM))
-        || (decoded_construct->op_code=OP_SUB_IMM_FROM_REGMEM,
+        || (decoded->op_code=OP_SUB_IMM_FROM_REGMEM,
                 TEST_OP(INSTR_HI, ISUB_IMM_FROM_REGMEM))
-        || (decoded_construct->op_code=OP_CMP_IMM_WITH_REGMEM,
+        || (decoded->op_code=OP_CMP_IMM_WITH_REGMEM,
                 TEST_OP(INSTR_HI, ICMP_IMM_WITH_REGMEM))) {
-        new_cursor = decode_params(context, decoded_construct, OPV_IMM2REGMEM_SOURCEBIT, new_cursor, params);
+        new_cursor = decode_params(context, decoded, OPV_IMM2REGMEM_SOURCEBIT, new_cursor, params);
         const u8 bits_432 = (buf[cursor+1] >> 3) & 0b111;
 
 #ifdef DEBUG
@@ -874,7 +1064,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
 #endif
             if (out != NULL)
                 sprintf(out, "add %s", params);
-            decoded_construct->op_code = OP_ADD_IMM2REGMEM;
+            decoded->op_code = OP_ADD_IMM2REGMEM;
             break;
         case 0b101: // SUB
 #ifdef DEBUG
@@ -882,7 +1072,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
 #endif
             if (out != NULL) 
                 sprintf(out, "sub %s", params);
-            decoded_construct->op_code = OP_SUB_IMM_FROM_REGMEM;
+            decoded->op_code = OP_SUB_IMM_FROM_REGMEM;
             break;
         case 0b111: // CMP 
 #ifdef DEBUG
@@ -890,7 +1080,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
 #endif
             if (out != NULL) 
                 sprintf(out, "cmp %s", params);
-            decoded_construct->op_code = OP_CMP_IMM_WITH_REGMEM;
+            decoded->op_code = OP_CMP_IMM_WITH_REGMEM;
             break;
         }
 

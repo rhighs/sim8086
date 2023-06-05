@@ -17,6 +17,8 @@
 #define REG_SI 6
 #define REG_DI 7
 
+#define __CPU_MEM_SIZE 1024 * 1024
+
 #define __CPU_U8_SIGN_BIT 0x80
 
 #define __CPU_U16_SIGN_BIT 0x8000
@@ -38,6 +40,8 @@ typedef struct {
     u16 registers[8];
     u8 flags;
     instruction_t *instructions;
+
+    u8 *memory;
 
     // Stuff related to ip state tracking
     u32 *ip2instrno;

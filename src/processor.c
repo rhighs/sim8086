@@ -8,6 +8,8 @@
 #include "opcode.h"
 #include "types.h"
 
+u8 __cpu_memory[__CPU_MEM_SIZE];
+
 static
 u32 processor_next_ip(processor_t *cpu) {
     for (u32 i = cpu->ip + 1;
@@ -23,6 +25,8 @@ u32 processor_next_ip(processor_t *cpu) {
 
 u32 processor_init(processor_t *cpu, decoder_context_t *decoder_ctx) {
     const u32 instructions_size = decoder_ctx->buflen * sizeof(instruction_t);
+
+    cpu->memory = (u8 *)__cpu_memory;
 
     cpu->instructions = (instruction_t *)malloc(instructions_size);
     memset(cpu->instructions, 0, instructions_size);
@@ -79,7 +83,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
 
     switch (instruction.op_code) {
         case OP_MOV:
-            if(operands[1].type == OperandRegister) {
+            if (operands[1].type == OperandRegister) {
                 u8 reg_dst = operands[0].reg.index;
                 u8 reg_src = operands[1].reg.index;
                 cpu->registers[reg_dst] = cpu->registers[reg_src];

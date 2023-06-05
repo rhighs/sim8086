@@ -4,6 +4,9 @@
 #include <stdint.h>
 
 #define NONE 0
+#define TRUE 1
+#define FALSE !TRUE
+
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
