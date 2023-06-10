@@ -37,28 +37,88 @@ u8 processor_mov_memory(processor_t *cpu, const instruction_t instruction) {
     return TRUE;
 }
 
+static inline
+void processor_write_reg_2_mem(processor_t *cpu,
+        const u32 mem_offset, const u16 reg) {
+    cpu->memory[mem_offset] = cpu->registers[reg];
+#ifdef CPU_DEBUG
+    printf("[CPU] wrotereg %d to mem location %d\n", reg, mem_offset);
+    processor_state_dump(cpu, stdout);
+#endif
+}
+
+static inline
+void processor_write_imm_2_mem(processor_t *cpu,
+        const u32 mem_offset, const u16 immediate) {
+    cpu->memory[mem_offset] = immediate;
+#ifdef CPU_DEBUG
+    printf("[CPU] wrote immediate %d to mem location %d\n", immediate, mem_offset);
+    processor_state_dump(cpu, stdout);
+#endif
+}
+
+static inline
+void processor_write_mem_2_reg(processor_t *cpu,
+        const u32 mem_offset, const u16 reg) {
+    cpu->registers[reg] = cpu->memory[mem_offset];
+#ifdef CPU_DEBUG
+    printf("[CPU] wrote mem location %d to reg %d\n", mem_offset, reg);
+    processor_state_dump(cpu, stdout);
+#endif
+}
+
+static inline
+void processor_write_imm_2_reg(processor_t *cpu,
+        const u16 reg, const u16 immediate) {
+    cpu->registers[reg] = immediate;
+#ifdef CPU_DEBUG
+    printf("[CPU] wrote immediate %d to reg %d\n", immediate, reg);
+    processor_state_dump(cpu, stdout);
+#endif
+}
+
+static inline
+void processor_write_reg_2_reg(processor_t *cpu,
+        const u16 reg_dst, const u16 reg_src) {
+    cpu->registers[reg_dst] = cpu->registers[reg_src];
+#ifdef DEBUG
+    printf("[CPU] wrote reg %d to reg %d\n", reg_src, reg_dst);
+    processor_state_dump(cpu, stdout);
+#endif
+}
+
 static
 u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code, 
         const operand_t destination_operand, const operand_t source_operand) {
     if (op_code == OP_MOV) {
-        assert(source_operand.type == OperandRegister);
+        assert(source_operand.type == OperandRegister
+                || source_operand.type == OperandMemory
+                || source_operand.type == OperandMemoryOffset
+                || source_operand.type == OperandMemoryOffset8
+                || source_operand.type == OperandMemoryOffset16);
 
-        u8 reg_dst = destination_operand.reg.index;
-        u8 reg_src = source_operand.reg.index;
-        cpu->registers[reg_dst] = cpu->registers[reg_src];
+        if (source_operand.type == OperandRegister) {
+            u8 reg_dst = destination_operand.reg.index;
+            u8 reg_src = source_operand.reg.index;
+            cpu->registers[reg_dst] = cpu->registers[reg_src];
+        } else if (source_operand.type == OperandMemory) {
+            u16 offset = source_operand.offset.offset;
+            u8 reg_dst = destination_operand.reg.index;
+            processor_write_mem_2_reg(cpu, offset, reg_dst);
+        }
     } else if (op_code == OP_MOV_IMM2REG) {
         assert(source_operand.type == OperandImmediate);
 
         u8 reg = destination_operand.reg.index;
         u16 value = source_operand.imm.value;
-        cpu->registers[reg] = value;
+        processor_write_imm_2_reg(cpu, reg, value);
     } else if (op_code == OP_MOV_ACC2MEM) {
         assert(destination_operand.type == OperandMemory);
         assert(source_operand.type == OperandRegister);
 
         u32 offset = destination_operand.offset.regs[0];
         u32 reg = source_operand.reg.index;
-        cpu->memory[offset] = cpu->registers[reg];
+        processor_write_reg_2_mem(cpu, offset, reg);
     } else if (op_code == OP_MOV_IMM2REGMEM) {
         assert(source_operand.type == OperandImmediate);
         assert(destination_operand.type == OperandRegister
@@ -71,33 +131,33 @@ u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code,
 
         if (destination_operand.type == OperandRegister) {
             u32 reg = destination_operand.reg.index;
-            cpu->registers[reg] = value;
+            processor_write_imm_2_reg(cpu, reg, value);
         } else if (destination_operand.type == OperandMemory) {
             u32 offset = destination_operand.offset.offset;
-            cpu->memory[offset] = value;
+            processor_write_imm_2_mem(cpu, offset, value);
         } else if (destination_operand.type == OperandMemoryOffset) {
             u32 offset = 0;
-            offset += destination_operand.offset.regs[0];
+            offset += cpu->registers[destination_operand.offset.regs[0]];
             offset += destination_operand.offset.n_regs > 1
-                ? destination_operand.offset.regs[1]
+                ? cpu->registers[destination_operand.offset.regs[1]]
                 : 0;
-            cpu->memory[offset] = value;
+            processor_write_imm_2_mem(cpu, offset, value);
         } else if (destination_operand.type == OperandMemoryOffset8) {
             u32 offset = 0;
-            offset += destination_operand.offset.regs[0];
+            offset += cpu->registers[destination_operand.offset.regs[0]];
             offset += destination_operand.offset.n_regs > 1
-                ? destination_operand.offset.regs[1]
+                ? cpu->registers[destination_operand.offset.regs[1]]
                 : 0;
             offset += destination_operand.offset.offset & 0xF;
-            cpu->memory[offset] = value;
+            processor_write_imm_2_mem(cpu, offset, value);
         } else if (destination_operand.type == OperandMemoryOffset16) {
             u32 offset = 0;
-            offset += destination_operand.offset.regs[0];
+            offset += cpu->registers[destination_operand.offset.regs[0]];
             offset += destination_operand.offset.n_regs > 1
-                ? destination_operand.offset.regs[1]
+                ? cpu->registers[destination_operand.offset.regs[1]]
                 : 0;
             offset += destination_operand.offset.offset;
-            cpu->memory[offset] = value;
+            processor_write_imm_2_mem(cpu, offset, value);
         }
     } else if (op_code == OP_MOV_MEM2ACC) {
         assert(source_operand.type == OperandMemory);
@@ -106,6 +166,7 @@ u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code,
         u32 reg = destination_operand.reg.index;
         u32 offset = source_operand.offset.regs[0];
         cpu->registers[reg] = cpu->memory[offset];
+        processor_write_mem_2_reg(cpu, offset, reg);
     }
 
     return TRUE;
@@ -419,4 +480,29 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
 unimplemented:
     assert(0 && "Unimplemented instruction interpretation!");
     return 1;
+}
+
+void processor_state_dump(processor_t *cpu, FILE *dump_file) {
+    if (dump_file == NULL)
+        dump_file = stdout;
+
+    fprintf(dump_file, "CPU mem state:\n\tax\tbx\tcx\tdx\tsp\tbp\tsi\tdi\n"
+            "\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n\n", 
+            cpu->registers[REG_AX],
+            cpu->registers[REG_BX],
+            cpu->registers[REG_CX],
+            cpu->registers[REG_DX],
+            cpu->registers[REG_SP],
+            cpu->registers[REG_BP],
+            cpu->registers[REG_SI],
+            cpu->registers[REG_DI]);
+
+    fprintf(dump_file, "CPU flags:\n\tZ\tS\tO\tC\tP\n\t%d\t%d\t%d\t%d\t%d\n",
+            (cpu->flags & FLAG_ZERO)     != 0,
+            (cpu->flags & FLAG_SIGN)     != 0,
+            (cpu->flags & FLAG_OVERFLOW) != 0,
+            (cpu->flags & FLAG_CARRY)    != 0,
+            (cpu->flags & FLAG_PARITY)   != 0);
+
+    fprintf(dump_file, "\nCPU ip: %d\n", cpu->ip);
 }

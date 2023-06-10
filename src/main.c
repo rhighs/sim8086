@@ -54,26 +54,7 @@ i32 main(i32 argc, char *argv[]) {
         }
     }
 
-    u8 i = 0;
-    printf("CPU mem state:\n\tax\tbx\tcx\tdx\tsp\tbp\tsi\tdi\n"
-                           "\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n\n", 
-            cpu.registers[REG_AX],
-            cpu.registers[REG_BX],
-            cpu.registers[REG_CX],
-            cpu.registers[REG_DX],
-            cpu.registers[REG_SP],
-            cpu.registers[REG_BP],
-            cpu.registers[REG_SI],
-            cpu.registers[REG_DI]);
-
-    printf("CPU flags:\n\tZ\tS\tO\tC\tP\n\t%d\t%d\t%d\t%d\t%d\n",
-            (cpu.flags & FLAG_ZERO)     != 0,
-            (cpu.flags & FLAG_SIGN)     != 0,
-            (cpu.flags & FLAG_OVERFLOW) != 0,
-            (cpu.flags & FLAG_CARRY)    != 0,
-            (cpu.flags & FLAG_PARITY)   != 0);
-
-    printf("\nCPU ip: %d\n", cpu.ip);
+    processor_state_dump(&cpu, stdout);
 
     return EXIT_SUCCESS;
 

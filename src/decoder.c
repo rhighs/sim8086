@@ -495,16 +495,16 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded,
                 if (out != NULL)
                     sprintf(rm, "[%d]", addr);
 
-                source_operand->type = OperandMemory;
-                source_operand->offset.n_regs = 0;
-                source_operand->offset.offset = addr;
+                destination_operand->type = OperandMemory;
+                destination_operand->offset.n_regs = 0;
+                destination_operand->offset.offset = addr;
             } else {
                 data = W ? OPT_2 << 8 | OPT_1 : OPT_1;
                 if (out != NULL)
                     sprintf(rm, "[%s]", ops[RM]);
 
-                source_operand->type = OperandMemoryOffset;
-                decode_rm_complex_operand(source_operand, RM, TRUE);
+                destination_operand->type = OperandMemoryOffset;
+                decode_rm_complex_operand(destination_operand, RM, TRUE);
             }
             break;
         }
@@ -515,9 +515,9 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded,
             if (out != NULL)
                 sprintf(rm, "[%s %c %d]", ops[RM], addr_sign, abs(addr));
 
-            source_operand->type = OperandMemoryOffset8;
-            decode_rm_complex_operand(source_operand, RM, FALSE);
-            source_operand->offset.offset = addr;
+            destination_operand->type = OperandMemoryOffset8;
+            decode_rm_complex_operand(destination_operand, RM, FALSE);
+            destination_operand->offset.offset = addr;
 
             new_cursor += 1; break;
         }
@@ -528,9 +528,9 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded,
             if (out != NULL)
                 sprintf(rm, "[%s %c %d]", ops[RM], addr_sign, abs(addr));
 
-            source_operand->type = OperandMemoryOffset16;
-            decode_rm_complex_operand(source_operand, RM, FALSE);
-            source_operand->offset.offset = addr;
+            destination_operand->type = OperandMemoryOffset16;
+            decode_rm_complex_operand(destination_operand, RM, FALSE);
+            destination_operand->offset.offset = addr;
 
             new_cursor += 2; break;
         }
@@ -550,8 +550,10 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded,
 
         if (out != NULL)
             sprintf(out, "%s, %s %d", rm, W ? "word" : "byte", data);
+
         // There's always at least one additinal byte for 8-bit [data]
         new_cursor += 1;
+        goto done;
 
 decode_cmp:
         i8 data8 = (i8)INSTR_LO;
@@ -566,11 +568,10 @@ decode_cmp:
                     W ? (((i16)OPT_1) << 8 | INSTR_LO) : (i8)INSTR_LO);
         }
 
-        decoded->operands[0].type = OperandRegister;
-        decoded->operands[0].reg.index = __D_REG_AX;
-        decoded->operands[1].type = OperandImmediate;
-        decoded->operands[1].imm.value = data16;
-        decoded->is_wide = W;
+        destination_operand->type = OperandRegister;
+        destination_operand->reg.index = __D_REG_AX;
+        source_operand->type = OperandImmediate;
+        source_operand->imm.value = data16;
     } else if (variant == OPV_IMM2REGMEM_SOURCEBIT) {
         const u8 S   = (instr & 0b0000001000000000) >> 9;
         const u8 REG = (instr & 0b0000000000111000) >> 3;
@@ -738,7 +739,7 @@ decode_cmp:
                 if (out != NULL)
                     sprintf(rm, "[%s]", ops[RM]);
 
-                memory_operand.type = OperandMemory;
+                memory_operand.type = OperandMemoryOffset;
                 decode_rm_complex_operand(&memory_operand, RM, TRUE);
             }
 
@@ -773,7 +774,7 @@ decode_cmp:
             const i8 byte = (u16)(buf[cursor + 2]);
             new_cursor += 1;
 
-            memory_operand.type = OperandMemory;
+            memory_operand.type = OperandMemoryOffset8;
             decode_rm_complex_operand(&memory_operand, RM, TRUE);
             memory_operand.offset.offset = byte;
             decoded->is_wide = FALSE;
@@ -820,7 +821,7 @@ decode_cmp:
             char wide_sign = wide < 0 ? '-' : '+';
             new_cursor += 2;
 
-            memory_operand.type = OperandMemory;
+            memory_operand.type = OperandMemoryOffset16;
             decode_rm_complex_operand(&memory_operand, RM, TRUE);
             memory_operand.offset.offset = data;
             decoded->is_wide = TRUE;
@@ -852,6 +853,7 @@ decode_cmp:
 
     }
 
+done:
     return new_cursor;
 }
 

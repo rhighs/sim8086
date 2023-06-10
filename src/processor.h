@@ -2,6 +2,7 @@
 #define PROCESSOR_H
 
 #include <stdint.h>
+#include <stdio.h>
 
 #include "decoder.h"
 #include "types.h"
@@ -77,5 +78,13 @@ u32 processor_init(processor_t *cpu, const u8 *program, const u32 size);
  * returns           Whether there is more instructions or not
  */
 u32 processor_fetch_instruction(processor_t *cpu, instruction_t *instruction);
+
+/*
+ * Dumps the processor state into a file
+ *
+ * *cpu:             A pointer to a processor context
+ * *dump_file:       A pointer to a file
+ */
+void processor_state_dump(processor_t *cpu, FILE *dump_file);
 
 #endif
