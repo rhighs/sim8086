@@ -26,8 +26,9 @@
 
 #define __CPU_IP2ISNTRNO_NONE UINT32_MAX
 
-#define __CPU_JUMP(__DISP)\
-    if (__DISP&__CPU_U8_SIGN_BIT) {cpu->ip-=abs((i8)(__DISP));} else {cpu->ip+=__DISP;}
+#define __CPU_JUMP(__DISP, __INSTR_DISPL)\
+    if (__DISP&__CPU_U8_SIGN_BIT) {cpu->ip-=abs((i8)(__DISP)) + __INSTR_DISPL;} \
+    else {cpu->ip+=__DISP + __INSTR_DISPL;}
 
 typedef enum {
     FLAG_ZERO       = 0x1 << 0,

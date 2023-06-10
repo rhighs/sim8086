@@ -219,8 +219,6 @@ u32 processor_fetch_instruction(processor_t *cpu, instruction_t *instruction) {
     }
     cpu->ip = new_ip + 2;
 
-    printf("{CPU} advanced %d ip's\n", cpu->ip - instruction->ip);
-
     return 1;
 }
 
@@ -361,7 +359,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         case OP_JZ:
             assert(operands[0].type == OperandImmediate);
             if (cpu->flags & FLAG_ZERO) {
-                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
+                __CPU_JUMP(operands[0].imm.value, (cpu->ip - instruction.ip));
             }
             break;
 
@@ -370,7 +368,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
             assert(operands[0].type == OperandImmediate);
             if ((cpu->flags & FLAG_SIGN ? 1 : 0)
                     ^ (cpu->flags & FLAG_OVERFLOW ? 1 : 0)) {
-                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
+                __CPU_JUMP(operands[0].imm.value, (cpu->ip - instruction.ip));
             }
             break;
 
@@ -379,7 +377,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
             assert(operands[0].type == OperandImmediate);
             if ((cpu->flags & FLAG_SIGN ? 1 : 0)
                     == (cpu->flags & FLAG_OVERFLOW ? 1 : 0)) {
-                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
+                __CPU_JUMP(operands[0].imm.value, (cpu->ip - instruction.ip));
             }
             break;
 
@@ -388,7 +386,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         // case OP_JC:
             assert(operands[0].type == OperandImmediate);
             if (cpu->flags & FLAG_CARRY) {
-                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
+                __CPU_JUMP(operands[0].imm.value, (cpu->ip - instruction.ip));
             }
             break;
 
@@ -396,7 +394,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         case OP_JNA:
             assert(operands[0].type == OperandImmediate);
             if ((cpu->flags & FLAG_CARRY) || (cpu->flags & FLAG_ZERO)) {
-                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
+                __CPU_JUMP(operands[0].imm.value, (cpu->ip - instruction.ip));
             }
             break;
 
@@ -404,31 +402,31 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         case OP_JPE:
             assert(operands[0].type == OperandImmediate);
             if (cpu->flags & FLAG_PARITY) {
-                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
+                __CPU_JUMP(operands[0].imm.value, (cpu->ip - instruction.ip));
             }
             break;
 
         case OP_JO:
             assert(operands[0].type == OperandImmediate);
             if (cpu->flags & FLAG_OVERFLOW) {
-                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
+                __CPU_JUMP(operands[0].imm.value, (cpu->ip - instruction.ip));
             }
         case OP_JNO:
             assert(operands[0].type == OperandImmediate);
             if (!(cpu->flags & FLAG_OVERFLOW)) {
-                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
+                __CPU_JUMP(operands[0].imm.value, (cpu->ip - instruction.ip));
             }
             break;
 
         case OP_JS:
             assert(operands[0].type == OperandImmediate);
             if (cpu->flags & FLAG_SIGN) {
-                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
+                __CPU_JUMP(operands[0].imm.value, (cpu->ip - instruction.ip));
             }
         case OP_JNS:
             assert(operands[0].type == OperandImmediate);
             if (!(cpu->flags & FLAG_SIGN)) {
-                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
+                __CPU_JUMP(operands[0].imm.value, (cpu->ip - instruction.ip));
             }
             break;
 
@@ -436,7 +434,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         case OP_JNE:
             assert(operands[0].type == OperandImmediate);
             if (!(cpu->flags & FLAG_ZERO)) {
-                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
+                __CPU_JUMP(operands[0].imm.value, (cpu->ip - instruction.ip));
             }
         break;
 
@@ -446,7 +444,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
             if ((cpu->flags & FLAG_ZERO) ||
                 ((cpu->flags & FLAG_SIGN ? 1 : 0)
                 ^ (cpu->flags & FLAG_OVERFLOW ? 1 : 0))) {
-                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
+                __CPU_JUMP(operands[0].imm.value, (cpu->ip - instruction.ip));
             }
             break;
         case OP_JG:
@@ -455,7 +453,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
             if (!(cpu->flags & FLAG_ZERO) &&
                 (cpu->flags & FLAG_SIGN ? 1 : 0)
                 == (cpu->flags & FLAG_OVERFLOW ? 1 : 0)) {
-                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
+                __CPU_JUMP(operands[0].imm.value, (cpu->ip - instruction.ip));
             }
             break;
 
@@ -463,7 +461,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         case OP_JA:
             assert(operands[0].type == OperandImmediate);
             if (!(cpu->flags & FLAG_CARRY) && !(cpu->flags & FLAG_ZERO)) {
-                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
+                __CPU_JUMP(operands[0].imm.value, (cpu->ip - instruction.ip));
             }
             break;
 
@@ -471,14 +469,14 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         case OP_JPO:
             assert(operands[0].type == OperandImmediate);
             if (!(cpu->flags & FLAG_PARITY)) {
-                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
+                __CPU_JUMP(operands[0].imm.value, (cpu->ip - instruction.ip));
             }
             break;
 
         case OP_JCXZ:
             assert(operands[0].type == OperandImmediate);
             if (!(cpu->registers[REG_CX])) {
-                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
+                __CPU_JUMP(operands[0].imm.value, (cpu->ip - instruction.ip));
             }
             break;
         default:
