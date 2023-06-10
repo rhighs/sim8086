@@ -39,17 +39,16 @@ typedef enum {
 typedef struct {
     u16 registers[8];
     u8 flags;
-    instruction_t *instructions;
+    decoder_context_t decoder_ctx;
 
+    u32 program_size;
     u8 *memory;
 
     // Stuff related to ip state tracking
-    u32 *ip2instrno;
-    u32 ip2instrno_len;
     u32 ip;
 } processor_t;
 
-/**
+/*
 * Interpret and execute the given instruction mutating the
 * cpu context.
 *
@@ -59,16 +58,24 @@ typedef struct {
 */
 u32 processor_exec(processor_t *cpu, const instruction_t instruction);
 
-/**
-* Initializes the processor struct with some initial assumptions,
-* such as an ip to instruction number table, useful for interpretation
-* of conditional jumps as well as decoding the entire program all at once
-* so that there's no need to decode the same instruction twice or more.
+/*
+* Initializes the processor copying program to processor memory
 *
-*   *decoder_ctx:    A pointer to decoder context that's already initialized
 *   *cpu:            A pointer to a processor context
-*   returns:         The number of instructions decoded
+*   *program:        Program data array
+*   *size:           size of the array
+*   returns:         Whether or not the initialization has failed (bool)
 */
-u32 processor_init(processor_t *cpu, decoder_context_t *decoder_ctx);
+u32 processor_init(processor_t *cpu, const u8 *program, const u32 size);
+
+/*
+ * Decodes and returns the instruction at the current IP, mutates the ip
+ * to the next instruction
+ *
+ * *cpu:             A pointer to a processor context
+ * *instruction      A pointer to where to store the decoded instruction
+ * returns           Whether there is more instructions or not
+ */
+u32 processor_fetch_instruction(processor_t *cpu, instruction_t *instruction);
 
 #endif

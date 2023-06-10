@@ -1093,48 +1093,23 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
     return -1;
 }
 
-u32 init_from_file(decoder_context_t *context, const char* filepath) {
-    assert(context != NULL);
+u32 decoder_init(decoder_context_t *context,
+        const u8 *program, const u32 size) {
+    assert(context != NULL && program != NULL);
 
-    FILE *file = fopen(filepath, "r");
-    if (file == NULL) {
-        goto bad_path_error;
-    }
+    context->buflen = size;
+    context->buf = program;
 
-    fseek(file, 0, SEEK_END);
-    u32 file_size = ftell(file);
-    rewind(file);
+    init_jmp(size);
+    context->cursor2pc = (u32*)malloc(size / 2);
 
-    context->buflen = file_size;
-    context->buf = (u8*)malloc(file_size);
-    u32 nread = 0;
-    u32 bytes_read = 0;
-    while ((nread = fread(context->buf, sizeof(u8), file_size, file)) > 0) {
-        bytes_read += nread;
-    }
-    init_jmp(bytes_read);
-    if (ferror(file)) {
-        goto read_error;
-    }
-    fclose(file);
-
-    context->cursor2pc = (u32*)malloc(file_size / 2);
-
-    return file_size;
-
-bad_path_error: 
-    fprintf(stderr, "[BAD_PATH_ERR]: path %s might not exist\n", filepath);
-    return 0;
-read_error:
-    fprintf(stderr, "[READ_FILE_ERR]: error reading file!\n");
-    fclose(file);
-    return 0;
+    return 1;
 }
 
 void destroy(decoder_context_t *context) {
     assert(context != NULL);
-    free(context->buf);
-    free(context->cursor2pc);
+    free((void *)context->buf);
+    free((void *)context->cursor2pc);
     context->cursor2pc = NULL;
     context->buf = NULL;
     context->buflen = 0;

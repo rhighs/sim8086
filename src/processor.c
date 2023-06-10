@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <memory.h>
 
@@ -9,19 +10,6 @@
 #include "types.h"
 
 u8 __cpu_memory[__CPU_MEM_SIZE];
-
-static
-u32 processor_next_ip(processor_t *cpu) {
-    for (u32 i = cpu->ip + 1;
-        i < cpu->ip2instrno_len;
-        i++) {
-        if (cpu->ip2instrno[i] != __CPU_IP2ISNTRNO_NONE) 
-            return i;
-    }
-
-    // No instruction was found? we must be at the end
-    return cpu->ip2instrno_len;
-}
 
 static
 void processor_set_flags(processor_t *cpu, u16 value) {
@@ -123,43 +111,50 @@ u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code,
     return TRUE;
 }
 
-u32 processor_init(processor_t *cpu, decoder_context_t *decoder_ctx) {
-    const u32 instructions_size = decoder_ctx->buflen * sizeof(instruction_t);
+u32 processor_init(processor_t *cpu, const u8 *program, const u32 size) {
+    assert(cpu != NULL && program != NULL);
+    assert(size < __CPU_MEM_SIZE && "Executable must be less than 64KB");
 
-    cpu->memory = (u8 *)__cpu_memory;
-
-    cpu->instructions = (instruction_t *)malloc(instructions_size);
-    memset(cpu->instructions, 0, instructions_size);
-
-    const u32 ip2instrno_size = decoder_ctx->buflen * sizeof(u32);
-    cpu->ip2instrno = (u32 *)malloc(ip2instrno_size);
-    memset(cpu->ip2instrno, __CPU_IP2ISNTRNO_NONE, ip2instrno_size);
-    cpu->ip2instrno_len = decoder_ctx->buflen;
-
-    instruction_t decoded = { 0 };
-
-    u32 n_decoded = 0;
-    u32 ip = 0;
-    for (; ip < cpu->ip2instrno_len; ip += 2) {
-        u32 new_ip = decode(decoder_ctx, &decoded, ip, NULL);
-        assert(new_ip < decoder_ctx->buflen && "new IP value must be within buffer bounds");
-
-        cpu->instructions[n_decoded] = decoded;
-        cpu->ip2instrno[ip] = n_decoded;
-        n_decoded += 1;
-
-        ip = new_ip;
+    // Zero init
+    int *err;
+    if ((err = (int *)memset(cpu, 0, sizeof(processor_t))) == NULL) {
+        fprintf(stderr, "Failed zero memset on processor data\n");
+        return 0;
     }
 
-    cpu->ip = 0;
+    // Load program data
+    cpu->program_size = size;
+    cpu->memory = (u8 *)__cpu_memory;
+    if ((err = (int *)memcpy(cpu->memory, program, size)) == NULL) {
+        fprintf(stderr, "Failed allocating processor program data\n");
+        return 0;
+    }
 
-    return n_decoded;
+    if (!decoder_init((&cpu->decoder_ctx), cpu->memory, size)) {
+        fprintf(stderr, "Processor decoder initialization has failed\n");
+        return 0;
+    }
+
+    return 1;
+}
+
+u32 processor_fetch_instruction(processor_t *cpu, instruction_t *instruction) {
+    const u32 ip = cpu->ip;
+    const u32 new_ip = decode(&(cpu->decoder_ctx), instruction, ip, NULL);
+    assert(new_ip < __CPU_MEM_SIZE
+            && "new IP value must be within buffer bounds");
+    if (new_ip > cpu->program_size) {
+        cpu->ip -= 2;
+        return 0;
+    }
+
+    cpu->ip = new_ip + 2;
+
+    return 1;
 }
 
 u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
     const operand_t *operands = instruction.operands;
-
-    cpu->ip = processor_next_ip(cpu);
 
     switch (instruction.op_code) {
         case OP_MOV:

@@ -57,14 +57,14 @@ typedef enum {
 } op_variants_t;
 
 typedef struct {
-    u8 *buf;
+    const u8 *buf;
     u32 buflen;
 
     u32 *cursor2pc;
     u32 pc;
 } decoder_context_t;
 
-u32 init_from_file(decoder_context_t *context, const char *filepath);
+u32 decoder_init(decoder_context_t *context, const u8 *program, const u32 size);
 
 u32 jmp_loc2label(const decoder_context_t *context, char *dst,
         const u32 location);
