@@ -90,35 +90,52 @@ void processor_write_reg_2_reg(processor_t *cpu,
 static
 u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code, 
         const operand_t destination_operand, const operand_t source_operand) {
+    const u8 source_offset_reg_1 = source_operand.offset.regs[0];
+    const u8 source_offset_reg_2 = source_operand.offset.regs[1];
+    const u8 destination_offset_reg_1 = destination_operand.offset.regs[0];
+    const u8 destination_offset_reg_2 = destination_operand.offset.regs[1];
+    const u8 reg_dst = destination_operand.reg.index;
+    const u8 reg_src = source_operand.reg.index;
+    const u16 source_offset = source_operand.offset.offset;
+    const u16 destination_offset = destination_operand.offset.offset;
+    const u16 source_immediate = source_operand.imm.value;
+
     if (op_code == OP_MOV) {
         assert(source_operand.type == OperandRegister
                 || source_operand.type == OperandMemory
-                || source_operand.type == OperandMemoryOffset
-                || source_operand.type == OperandMemoryOffset8
-                || source_operand.type == OperandMemoryOffset16);
+                || source_operand.type == OperandMemoryOffset);
 
         if (source_operand.type == OperandRegister) {
-            u8 reg_dst = destination_operand.reg.index;
-            u8 reg_src = source_operand.reg.index;
-            cpu->registers[reg_dst] = cpu->registers[reg_src];
+            if (destination_operand.type == OperandRegister) {
+                processor_write_reg_2_reg(cpu, reg_dst, reg_src);
+            } else if (destination_operand.type == OperandMemoryOffset) {
+                u32 offset = 0;
+                offset += cpu->registers[destination_offset_reg_1];
+                offset += destination_operand.offset.n_regs > 1
+                    ? cpu->registers[destination_offset_reg_2]
+                    : 0;
+                processor_write_reg_2_mem(cpu, offset, reg_src);
+            }
         } else if (source_operand.type == OperandMemory) {
-            u16 offset = source_operand.offset.offset;
-            u8 reg_dst = destination_operand.reg.index;
+            if (destination_operand.type == OperandRegister) {
+                processor_write_mem_2_reg(cpu, source_offset, reg_dst);
+            }
+        } else if (source_operand.type == OperandMemoryOffset) {
+            u32 offset = 0;
+            offset += cpu->registers[destination_offset_reg_1];
+            offset += destination_operand.offset.n_regs > 1
+                ? cpu->registers[destination_offset_reg_2]
+                : 0;
+
             processor_write_mem_2_reg(cpu, offset, reg_dst);
         }
     } else if (op_code == OP_MOV_IMM2REG) {
         assert(source_operand.type == OperandImmediate);
-
-        u8 reg = destination_operand.reg.index;
-        u16 value = source_operand.imm.value;
-        processor_write_imm_2_reg(cpu, reg, value);
+        processor_write_imm_2_reg(cpu, reg_dst, source_immediate);
     } else if (op_code == OP_MOV_ACC2MEM) {
         assert(destination_operand.type == OperandMemory);
         assert(source_operand.type == OperandRegister);
-
-        u32 offset = destination_operand.offset.regs[0];
-        u32 reg = source_operand.reg.index;
-        processor_write_reg_2_mem(cpu, offset, reg);
+        processor_write_reg_2_mem(cpu, destination_offset, reg_src);
     } else if (op_code == OP_MOV_IMM2REGMEM) {
         assert(source_operand.type == OperandImmediate);
         assert(destination_operand.type == OperandRegister
@@ -127,46 +144,38 @@ u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code,
                 || destination_operand.type == OperandMemoryOffset8
                 || destination_operand.type == OperandMemoryOffset16);
 
-        u32 value = source_operand.imm.value;
-
         if (destination_operand.type == OperandRegister) {
-            u32 reg = destination_operand.reg.index;
-            processor_write_imm_2_reg(cpu, reg, value);
+            processor_write_imm_2_reg(cpu, reg_dst, source_immediate);
         } else if (destination_operand.type == OperandMemory) {
-            u32 offset = destination_operand.offset.offset;
-            processor_write_imm_2_mem(cpu, offset, value);
+            processor_write_imm_2_mem(cpu, destination_offset, source_immediate);
         } else if (destination_operand.type == OperandMemoryOffset) {
             u32 offset = 0;
-            offset += cpu->registers[destination_operand.offset.regs[0]];
+            offset += cpu->registers[destination_offset_reg_1];
             offset += destination_operand.offset.n_regs > 1
-                ? cpu->registers[destination_operand.offset.regs[1]]
+                ? cpu->registers[destination_offset_reg_2]
                 : 0;
-            processor_write_imm_2_mem(cpu, offset, value);
+            processor_write_imm_2_mem(cpu, offset, source_immediate);
         } else if (destination_operand.type == OperandMemoryOffset8) {
             u32 offset = 0;
-            offset += cpu->registers[destination_operand.offset.regs[0]];
+            offset += cpu->registers[destination_offset_reg_1];
             offset += destination_operand.offset.n_regs > 1
-                ? cpu->registers[destination_operand.offset.regs[1]]
+                ? cpu->registers[destination_offset_reg_2]
                 : 0;
-            offset += destination_operand.offset.offset & 0xF;
-            processor_write_imm_2_mem(cpu, offset, value);
+            offset += destination_offset & 0xF;
+            processor_write_imm_2_mem(cpu, offset, source_immediate);
         } else if (destination_operand.type == OperandMemoryOffset16) {
             u32 offset = 0;
-            offset += cpu->registers[destination_operand.offset.regs[0]];
+            offset += cpu->registers[destination_offset_reg_1];
             offset += destination_operand.offset.n_regs > 1
-                ? cpu->registers[destination_operand.offset.regs[1]]
+                ? cpu->registers[destination_offset_reg_2]
                 : 0;
-            offset += destination_operand.offset.offset;
-            processor_write_imm_2_mem(cpu, offset, value);
+            offset += destination_offset;
+            processor_write_imm_2_mem(cpu, offset, source_immediate);
         }
     } else if (op_code == OP_MOV_MEM2ACC) {
         assert(source_operand.type == OperandMemory);
         assert(destination_operand.type == OperandRegister);
-
-        u32 reg = destination_operand.reg.index;
-        u32 offset = source_operand.offset.regs[0];
-        cpu->registers[reg] = cpu->memory[offset];
-        processor_write_mem_2_reg(cpu, offset, reg);
+        processor_write_mem_2_reg(cpu, source_offset, reg_dst);
     }
 
     return TRUE;
@@ -200,16 +209,17 @@ u32 processor_init(processor_t *cpu, const u8 *program, const u32 size) {
 }
 
 u32 processor_fetch_instruction(processor_t *cpu, instruction_t *instruction) {
-    const u32 ip = cpu->ip;
-    const u32 new_ip = decode(&(cpu->decoder_ctx), instruction, ip, NULL);
+    const u32 new_ip = decode(&(cpu->decoder_ctx), instruction, cpu->ip, NULL);
     assert(new_ip < __CPU_MEM_SIZE
             && "new IP value must be within buffer bounds");
+    instruction->ip = cpu->ip; // Hacky stuff for jumps
     if (new_ip > cpu->program_size) {
         cpu->ip -= 2;
         return 0;
     }
-
     cpu->ip = new_ip + 2;
+
+    printf("{CPU} advanced %d ip's\n", cpu->ip - instruction->ip);
 
     return 1;
 }
@@ -351,7 +361,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         case OP_JZ:
             assert(operands[0].type == OperandImmediate);
             if (cpu->flags & FLAG_ZERO) {
-                __CPU_JUMP(operands[0].imm.value);
+                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
             }
             break;
 
@@ -360,7 +370,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
             assert(operands[0].type == OperandImmediate);
             if ((cpu->flags & FLAG_SIGN ? 1 : 0)
                     ^ (cpu->flags & FLAG_OVERFLOW ? 1 : 0)) {
-                __CPU_JUMP(operands[0].imm.value);
+                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
             }
             break;
 
@@ -369,7 +379,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
             assert(operands[0].type == OperandImmediate);
             if ((cpu->flags & FLAG_SIGN ? 1 : 0)
                     == (cpu->flags & FLAG_OVERFLOW ? 1 : 0)) {
-                __CPU_JUMP(operands[0].imm.value);
+                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
             }
             break;
 
@@ -378,7 +388,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         // case OP_JC:
             assert(operands[0].type == OperandImmediate);
             if (cpu->flags & FLAG_CARRY) {
-                __CPU_JUMP(operands[0].imm.value);
+                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
             }
             break;
 
@@ -386,7 +396,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         case OP_JNA:
             assert(operands[0].type == OperandImmediate);
             if ((cpu->flags & FLAG_CARRY) || (cpu->flags & FLAG_ZERO)) {
-                __CPU_JUMP(operands[0].imm.value);
+                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
             }
             break;
 
@@ -394,31 +404,31 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         case OP_JPE:
             assert(operands[0].type == OperandImmediate);
             if (cpu->flags & FLAG_PARITY) {
-                __CPU_JUMP(operands[0].imm.value);
+                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
             }
             break;
 
         case OP_JO:
             assert(operands[0].type == OperandImmediate);
             if (cpu->flags & FLAG_OVERFLOW) {
-                __CPU_JUMP(operands[0].imm.value);
+                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
             }
         case OP_JNO:
             assert(operands[0].type == OperandImmediate);
             if (!(cpu->flags & FLAG_OVERFLOW)) {
-                __CPU_JUMP(operands[0].imm.value);
+                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
             }
             break;
 
         case OP_JS:
             assert(operands[0].type == OperandImmediate);
             if (cpu->flags & FLAG_SIGN) {
-                __CPU_JUMP(operands[0].imm.value);
+                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
             }
         case OP_JNS:
             assert(operands[0].type == OperandImmediate);
             if (!(cpu->flags & FLAG_SIGN)) {
-                __CPU_JUMP(operands[0].imm.value);
+                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
             }
             break;
 
@@ -426,7 +436,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         case OP_JNE:
             assert(operands[0].type == OperandImmediate);
             if (!(cpu->flags & FLAG_ZERO)) {
-                __CPU_JUMP(operands[0].imm.value);
+                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
             }
         break;
 
@@ -436,7 +446,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
             if ((cpu->flags & FLAG_ZERO) ||
                 ((cpu->flags & FLAG_SIGN ? 1 : 0)
                 ^ (cpu->flags & FLAG_OVERFLOW ? 1 : 0))) {
-                __CPU_JUMP(operands[0].imm.value);
+                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
             }
             break;
         case OP_JG:
@@ -445,7 +455,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
             if (!(cpu->flags & FLAG_ZERO) &&
                 (cpu->flags & FLAG_SIGN ? 1 : 0)
                 == (cpu->flags & FLAG_OVERFLOW ? 1 : 0)) {
-                __CPU_JUMP(operands[0].imm.value);
+                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
             }
             break;
 
@@ -453,7 +463,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         case OP_JA:
             assert(operands[0].type == OperandImmediate);
             if (!(cpu->flags & FLAG_CARRY) && !(cpu->flags & FLAG_ZERO)) {
-                __CPU_JUMP(operands[0].imm.value);
+                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
             }
             break;
 
@@ -461,14 +471,14 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         case OP_JPO:
             assert(operands[0].type == OperandImmediate);
             if (!(cpu->flags & FLAG_PARITY)) {
-                __CPU_JUMP(operands[0].imm.value);
+                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
             }
             break;
 
         case OP_JCXZ:
             assert(operands[0].type == OperandImmediate);
             if (!(cpu->registers[REG_CX])) {
-                __CPU_JUMP(operands[0].imm.value);
+                __CPU_JUMP(operands[0].imm.value + (cpu->ip - instruction.ip));
             }
             break;
         default:

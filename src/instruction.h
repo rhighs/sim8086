@@ -27,6 +27,7 @@ typedef struct {
 } operand_t;
 
 typedef struct {
+    u32 ip;
     operand_t operands[2];
     u8 is_wide;
     op_code_t op_code;
