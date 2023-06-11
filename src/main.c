@@ -43,9 +43,12 @@ i32 main(i32 argc, char *argv[]) {
         u32 old_ip = cpu.ip;
         instruction_t instruction = { 0 };
 
-        if (!processor_fetch_instruction(&cpu, &instruction)) {
+        char line[32] = {0};
+        if (!processor_fetch_instruction(&cpu, &instruction, (char *)line)) {
             break;
         }
+
+        printf("%s\n", line);
 
         u32 exec_err = processor_exec(&cpu, instruction);
         if (exec_err) {

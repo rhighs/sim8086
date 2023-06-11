@@ -604,7 +604,7 @@ decode_cmp:
             new_cursor += 1;
         }
 
-        decoded->is_wide = is_wide_data;
+        decoded->is_wide = W;
 
         operand_t *destination_operand = &(decoded->operands[0]);
         operand_t *source_operand = &(decoded->operands[1]);
@@ -661,7 +661,7 @@ decode_cmp:
         case __D_MOD_R2R: {
             data = is_wide_data ? OPT_2 << 8 | OPT_1 : OPT_1;
             if (out != NULL)
-                regcode_to_str(RM, is_wide_data, rm);
+                regcode_to_str(RM, W, rm);
 
             destination_operand->type = OperandRegister;
             destination_operand->reg.index = RM;

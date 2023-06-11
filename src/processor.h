@@ -26,9 +26,27 @@
 
 #define __CPU_IP2ISNTRNO_NONE UINT32_MAX
 
-#define __CPU_JUMP(__DISP, __INSTR_DISPL)\
-    if (__DISP&__CPU_U8_SIGN_BIT) {cpu->ip-=abs((i8)(__DISP)) + __INSTR_DISPL;} \
-    else {cpu->ip+=__DISP + __INSTR_DISPL;}
+
+#ifdef CPU_DEBUG
+    #define __CPU_JUMP(__DISP)\
+    if (__DISP&__CPU_U8_SIGN_BIT) {\
+        const u8 displ = abs((i8)(__DISP));\
+        const u8 iwidth = __INSTR_DISPL;\
+        cpu->ip-=displ;\
+        printf("[CPU]: jumped -%d\n", displ);\
+    } else {\
+        const u8 displ = __DISP - __INSTR_DISPL;\
+        cpu->ip+=displ;\
+        printf("[CPU]: jumped +%d\n", displ);\
+    }
+#else
+    #define __CPU_JUMP(__DISP)\
+    if (__DISP&__CPU_U8_SIGN_BIT) {\
+        cpu->ip-=abs((i8)(__DISP));\
+    } else {\
+        cpu->ip+=__DISP;\
+    }
+#endif
 
 typedef enum {
     FLAG_ZERO       = 0x1 << 0,
@@ -76,9 +94,10 @@ u32 processor_init(processor_t *cpu, const u8 *program, const u32 size);
  *
  * *cpu:             A pointer to a processor context
  * *instruction      A pointer to where to store the decoded instruction
+ * *out              A pointer to where to print the instruction decoded
  * returns           Whether there is more instructions or not
  */
-u32 processor_fetch_instruction(processor_t *cpu, instruction_t *instruction);
+u32 processor_fetch_instruction(processor_t *cpu, instruction_t *instruction, char *out);
 
 /*
  * Dumps the processor state into a file
