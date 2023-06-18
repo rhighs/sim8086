@@ -12,6 +12,58 @@
 u8 __cpu_memory[__CPU_MEM_SIZE];
 
 static
+u8 processor_short_reg_get(processor_t *cpu, u8 reg) {
+    switch (reg) {
+     case REG_AL: return cpu->registers[REG_AX];
+     case REG_BL: return cpu->registers[REG_BX];
+     case REG_CL: return cpu->registers[REG_CX];
+     case REG_DL: return cpu->registers[REG_DX];
+     case REG_AH: return cpu->registers[REG_AX] >> 8;
+     case REG_BH: return cpu->registers[REG_BX] >> 8;
+     case REG_CH: return cpu->registers[REG_CX] >> 8;
+     case REG_DH: return cpu->registers[REG_DX] >> 8;
+     default:
+     assert(FALSE && "Unreachable condition!");
+    }
+}
+
+static
+void processor_short_reg_set(processor_t *cpu, u8 reg, u8 value) {
+    switch (reg) {
+     case REG_AH:
+        cpu->registers[REG_AX] &= 0x00FF;
+        cpu->registers[REG_AX] |= (((u16)value) << 8);
+        break;
+     case REG_BH:
+        cpu->registers[REG_BX] &= 0x00FF;
+        cpu->registers[REG_BX] |= (((u16)value) << 8);
+        break;
+     case REG_CH:
+        cpu->registers[REG_CX] &= 0x00FF;
+        cpu->registers[REG_CX] |= (((u16)value) << 8);
+        break;
+     case REG_DH:
+        cpu->registers[REG_DX] &= 0x00FF;
+        cpu->registers[REG_DX] |= (((u16)value) << 8);
+        break;
+     case REG_AL:
+        cpu->registers[REG_AX] &= 0xFF00;
+        cpu->registers[REG_AX] |= value;
+     case REG_BL:
+        cpu->registers[REG_BX] &= 0xFF00;
+        cpu->registers[REG_BX] |= value;
+     case REG_CL:
+        cpu->registers[REG_CX] &= 0xFF00;
+        cpu->registers[REG_CX] |= value;
+     case REG_DL:
+        cpu->registers[REG_DX] &= 0xFF00;
+        cpu->registers[REG_DX] |= value;
+     default:
+     assert(FALSE && "Unreachable condition!");
+    }
+}
+
+static
 void processor_set_flags(processor_t *cpu, u16 value) {
     u8 flags = 0;
     if (value & __CPU_U16_SIGN_BIT) {
@@ -39,8 +91,12 @@ u8 processor_mov_memory(processor_t *cpu, const instruction_t instruction) {
 
 static inline
 void processor_write_reg_2_mem(processor_t *cpu,
-        const u32 mem_offset, const u16 reg) {
-    cpu->memory[mem_offset] = cpu->registers[reg];
+        const u32 mem_offset, const u16 reg, const u8 is_wide) {
+    if (!is_wide) {
+        cpu->memory[mem_offset] = processor_short_reg_get(cpu, reg);
+    } else {
+        cpu->memory[mem_offset] = cpu->registers[reg];
+    }
 #ifdef CPU_DEBUG
     printf("[CPU] wrotereg %d to mem location %d\n", reg, mem_offset);
     processor_state_dump(cpu, stdout);
@@ -59,8 +115,12 @@ void processor_write_imm_2_mem(processor_t *cpu,
 
 static inline
 void processor_write_mem_2_reg(processor_t *cpu,
-        const u32 mem_offset, const u16 reg) {
-    cpu->registers[reg] = cpu->memory[mem_offset];
+        const u32 mem_offset, const u16 reg, const u8 is_wide) {
+    if (!is_wide) {
+        processor_short_reg_set(cpu, reg, cpu->memory[mem_offset]);
+    } else {
+        cpu->registers[reg] = cpu->memory[mem_offset];
+    }
 #ifdef CPU_DEBUG
     printf("[CPU] wrote mem location %d to reg %d\n", mem_offset, reg);
     processor_state_dump(cpu, stdout);
@@ -69,8 +129,13 @@ void processor_write_mem_2_reg(processor_t *cpu,
 
 static inline
 void processor_write_imm_2_reg(processor_t *cpu,
-        const u16 reg, const u16 immediate) {
+        const u16 reg, const u16 immediate, const u8 is_wide) {
     cpu->registers[reg] = immediate;
+    if (!is_wide) {
+        processor_short_reg_set(cpu, reg, immediate);
+    } else {
+        cpu->registers[reg] = immediate;
+    }
 #ifdef CPU_DEBUG
     printf("[CPU] wrote immediate %d to reg %d\n", immediate, reg);
     processor_state_dump(cpu, stdout);
@@ -79,8 +144,13 @@ void processor_write_imm_2_reg(processor_t *cpu,
 
 static inline
 void processor_write_reg_2_reg(processor_t *cpu,
-        const u16 reg_dst, const u16 reg_src) {
+        const u16 reg_dst, const u16 reg_src, const u8 is_wide) {
     cpu->registers[reg_dst] = cpu->registers[reg_src];
+    if (!is_wide) {
+        processor_short_reg_set(cpu, reg_dst, processor_short_reg_get(cpu, reg_src));
+    } else {
+        cpu->registers[reg_dst] = cpu->registers[reg_src];
+    }
 #ifdef DEBUG
     printf("[CPU] wrote reg %d to reg %d\n", reg_src, reg_dst);
     processor_state_dump(cpu, stdout);
@@ -89,7 +159,7 @@ void processor_write_reg_2_reg(processor_t *cpu,
 
 static
 u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code, 
-        const operand_t destination_operand, const operand_t source_operand) {
+        const operand_t destination_operand, const operand_t source_operand, const u8 is_wide) {
     const u8 source_offset_reg_1 = source_operand.offset.regs[0];
     const u8 source_offset_reg_2 = source_operand.offset.regs[1];
     const u8 destination_offset_reg_1 = destination_operand.offset.regs[0];
@@ -107,18 +177,34 @@ u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code,
 
         if (source_operand.type == OperandRegister) {
             if (destination_operand.type == OperandRegister) {
-                processor_write_reg_2_reg(cpu, reg_dst, reg_src);
+                processor_write_reg_2_reg(cpu, reg_dst, reg_src, is_wide);
             } else if (destination_operand.type == OperandMemoryOffset) {
                 u32 offset = 0;
                 offset += cpu->registers[destination_offset_reg_1];
                 offset += destination_operand.offset.n_regs > 1
                     ? cpu->registers[destination_offset_reg_2]
                     : 0;
-                processor_write_reg_2_mem(cpu, offset, reg_src);
+                processor_write_reg_2_mem(cpu, offset, reg_src, is_wide);
+            } else if (destination_operand.type == OperandMemoryOffset8) {
+                u32 offset = 0;
+                offset += cpu->registers[destination_offset_reg_1];
+                offset += destination_operand.offset.n_regs > 1
+                    ? cpu->registers[destination_offset_reg_2]
+                    : 0;
+                offset += destination_offset & 0xFF;
+                processor_write_reg_2_mem(cpu, offset, reg_src, is_wide);
+            } else if (destination_operand.type == OperandMemoryOffset16) {
+                u32 offset = 0;
+                offset += cpu->registers[destination_offset_reg_1];
+                offset += destination_operand.offset.n_regs > 1
+                    ? cpu->registers[destination_offset_reg_2]
+                    : 0;
+                offset += destination_offset;
+                processor_write_reg_2_mem(cpu, offset, reg_src, is_wide);
             }
         } else if (source_operand.type == OperandMemory) {
             if (destination_operand.type == OperandRegister) {
-                processor_write_mem_2_reg(cpu, source_offset, reg_dst);
+                processor_write_mem_2_reg(cpu, source_offset, reg_dst, is_wide);
             }
         } else if (source_operand.type == OperandMemoryOffset) {
             assert(destination_operand.type == OperandRegister);
@@ -129,15 +215,15 @@ u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code,
                 ? cpu->registers[source_offset_reg_2]
                 : 0;
 
-            processor_write_mem_2_reg(cpu, offset, reg_dst);
+            processor_write_mem_2_reg(cpu, offset, reg_dst, is_wide);
         }
     } else if (op_code == OP_MOV_IMM2REG) {
         assert(source_operand.type == OperandImmediate);
-        processor_write_imm_2_reg(cpu, reg_dst, source_immediate);
+        processor_write_imm_2_reg(cpu, reg_dst, source_immediate, is_wide);
     } else if (op_code == OP_MOV_ACC2MEM) {
         assert(destination_operand.type == OperandMemory);
         assert(source_operand.type == OperandRegister);
-        processor_write_reg_2_mem(cpu, destination_offset, reg_src);
+        processor_write_reg_2_mem(cpu, destination_offset, reg_src, is_wide);
     } else if (op_code == OP_MOV_IMM2REGMEM) {
         assert(source_operand.type == OperandImmediate);
         assert(destination_operand.type == OperandRegister
@@ -147,7 +233,7 @@ u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code,
                 || destination_operand.type == OperandMemoryOffset16);
 
         if (destination_operand.type == OperandRegister) {
-            processor_write_imm_2_reg(cpu, reg_dst, source_immediate);
+            processor_write_imm_2_reg(cpu, reg_dst, source_immediate, is_wide);
         } else if (destination_operand.type == OperandMemory) {
             processor_write_imm_2_mem(cpu, destination_offset, source_immediate);
         } else if (destination_operand.type == OperandMemoryOffset) {
@@ -163,7 +249,7 @@ u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code,
             offset += destination_operand.offset.n_regs > 1
                 ? cpu->registers[destination_offset_reg_2]
                 : 0;
-            offset += destination_offset & 0xF;
+            offset += destination_offset & 0xFF;
             processor_write_imm_2_mem(cpu, offset, source_immediate);
         } else if (destination_operand.type == OperandMemoryOffset16) {
             u32 offset = 0;
@@ -177,7 +263,7 @@ u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code,
     } else if (op_code == OP_MOV_MEM2ACC) {
         assert(source_operand.type == OperandMemory);
         assert(destination_operand.type == OperandRegister);
-        processor_write_mem_2_reg(cpu, source_offset, reg_dst);
+        processor_write_mem_2_reg(cpu, source_offset, reg_dst, is_wide);
     }
 
     return TRUE;
@@ -245,7 +331,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         case OP_MOV_IMM2REGMEM:
         case OP_MOV_MEM2ACC:
             if (!processor_exec_mov(cpu, instruction.op_code,
-                        destination_operand, source_operand)) {
+                        destination_operand, source_operand, instruction.is_wide)) {
                 goto unimplemented;
             }
             break;
@@ -411,7 +497,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
                 assert(destination_operand.type == OperandRegister);
                 u8 reg = destination_operand.reg.index;
                 u16 a = cpu->registers[reg];
-                u16 b = source_operand.imm.value;;
+                u16 b = source_operand.imm.value;
                 u16 value = a - b;
                 cpu->registers[reg] = value;
                 processor_set_flags(cpu, value);
@@ -424,7 +510,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
 
         case OP_CMP_IMM_WITH_ACC:
         case OP_CMP_IMM_WITH_REGMEM:
-            if(source_operand.type == OperandRegister) {
+            if(source_operand.type == OperandImmediate) {
                 assert(destination_operand.type == OperandRegister);
                 u8 reg = destination_operand.reg.index;
                 u16 sum = cpu->registers[reg] - source_operand.imm.value;
@@ -546,6 +632,26 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
             if (!(cpu->registers[REG_CX]))
                 __CPU_JUMP(destination_operand.imm.value);
             break;
+
+        case OP_LOOP:
+            assert(destination_operand.type == OperandImmediate);
+            if (--cpu->registers[REG_CX] > 0) {
+                __CPU_JUMP(destination_operand.imm.value);
+            }
+            break;
+
+        case OP_LOOPZ:
+            assert(destination_operand.type == OperandImmediate);
+            if (cpu->flags & FLAG_ZERO)
+                __CPU_JUMP(destination_operand.imm.value);
+            break;
+
+        case OP_LOOPNZ:
+            assert(destination_operand.type == OperandImmediate);
+            if (!(cpu->flags & FLAG_ZERO))
+                __CPU_JUMP(destination_operand.imm.value);
+            break;
+
         default:
             goto unimplemented;
     }
@@ -580,4 +686,15 @@ void processor_state_dump(processor_t *cpu, FILE *dump_file) {
             (cpu->flags & FLAG_PARITY)   != 0);
 
     fprintf(dump_file, "\nCPU ip: %d\n", cpu->ip);
+}
+
+void processor_mem_dump(processor_t *cpu, FILE *dump_file) {
+    if (dump_file == NULL) 
+        dump_file = stdout;
+    u32 written = fwrite(cpu->memory, sizeof(u8), __CPU_MEM_SIZE, dump_file);
+
+    if (written != __CPU_MEM_SIZE) {
+        fprintf(stderr,
+                "processor_mem_dump wrote less than expected, ignoring...\n");
+    }
 }

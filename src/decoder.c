@@ -271,12 +271,6 @@ u32 decode_jmps(decoder_context_t *context, instruction_t *decoded,
     return new_cursor;
 }
 
-// TOOD: implementation
-u32 decode_loops(const u8 *buf, const u32 cursor,
-        op_variants_t variant, char *out) {
-    return cursor;
-}
-
 static
 void decode_rm_complex_operand(operand_t *operand, const u8 RM,
         const u8 has_direct) {
@@ -694,6 +688,8 @@ decode_cmp:
         printf("\n");
 #endif
 
+        decoded->is_wide = W;
+
         operand_t *destination_operand = &(decoded->operands[0]);
         operand_t *source_operand = &(decoded->operands[1]);
 
@@ -774,9 +770,8 @@ decode_cmp:
             new_cursor += 1;
 
             memory_operand.type = OperandMemoryOffset8;
-            decode_rm_complex_operand(&memory_operand, RM, TRUE);
+            decode_rm_complex_operand(&memory_operand, RM, FALSE);
             memory_operand.offset.offset = byte;
-            decoded->is_wide = FALSE;
 
             register_operand.type = OperandRegister;
             register_operand.reg.index = REG;
@@ -821,9 +816,8 @@ decode_cmp:
             new_cursor += 2;
 
             memory_operand.type = OperandMemoryOffset16;
-            decode_rm_complex_operand(&memory_operand, RM, TRUE);
+            decode_rm_complex_operand(&memory_operand, RM, FALSE);
             memory_operand.offset.offset = data;
-            decoded->is_wide = TRUE;
 
             register_operand.type = OperandRegister;
             register_operand.reg.index = REG;
@@ -1037,7 +1031,9 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
         char params[32];
         const char* instr_str = instr2str(INSTR_HI, NONE);
         assert(instr_str[0] == 'l' && "instruction name must start with 'l'");
-        new_cursor = decode_loops(buf, cursor, matched_variant, params);
+
+        decoded->operands[0].type = OperandImmediate;
+        decoded->operands[0].imm.value = buf[cursor+1];
 
         context->pc++;
 

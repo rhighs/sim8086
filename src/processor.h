@@ -18,6 +18,15 @@
 #define REG_SI 6
 #define REG_DI 7
 
+#define REG_AL 0
+#define REG_CL 1
+#define REG_DL 2
+#define REG_BL 3
+#define REG_AH 4
+#define REG_CH 5
+#define REG_DH 6
+#define REG_BH 7
+
 #define __CPU_MEM_SIZE 1024 * 1024
 
 #define __CPU_U8_SIGN_BIT 0x80
@@ -31,11 +40,10 @@
     #define __CPU_JUMP(__DISP)\
     if (__DISP&__CPU_U8_SIGN_BIT) {\
         const u8 displ = abs((i8)(__DISP));\
-        const u8 iwidth = __INSTR_DISPL;\
         cpu->ip-=displ;\
         printf("[CPU]: jumped -%d\n", displ);\
     } else {\
-        const u8 displ = __DISP - __INSTR_DISPL;\
+        const u8 displ = __DISP;\
         cpu->ip+=displ;\
         printf("[CPU]: jumped +%d\n", displ);\
     }
@@ -106,5 +114,13 @@ u32 processor_fetch_instruction(processor_t *cpu, instruction_t *instruction, ch
  * *dump_file:       A pointer to a file
  */
 void processor_state_dump(processor_t *cpu, FILE *dump_file);
+
+/*
+ * Dumps memory into a file
+ *
+ * *cpu:             A pointer to a processor context
+ * *dump_file:       A pointer to a file
+ */
+void processor_mem_dump(processor_t *cpu, FILE *dump_file);
 
 #endif
