@@ -11,8 +11,7 @@ The emulator features a built-in decoder that allows disassembling of machine
 code data into a valid 8086 assembly language. Regarding simulation
 capabilities it is able to replicate execution of **almost** any type of x8086
 program as long as it fits the official instruction set as per
-[8086 reference specs](https://edge.edx.org\
-/c4x/BITSPilani/EEE231/asset/8086_family_Users_Manual_1_.pdf).
+[8086 reference specs](https://edge.edx.org/c4x/BITSPilani/EEE231/asset/8086_family_Users_Manual_1_.pdf).
 
 Bear in mind that being a recreational project and WIP, some instructions
 might still be unimplemented and it probably won't change in the short
