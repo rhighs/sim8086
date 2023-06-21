@@ -1017,6 +1017,211 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
         return new_cursor;
     }
 
+    if (   (decoded->op_code=OP_SAL,
+                TEST_OP(INSTR_HI, ISAL))
+        || (decoded->op_code=OP_SHL,
+                TEST_OP(INSTR_HI, ISHL))
+        || (decoded->op_code=OP_SAR,
+                TEST_OP(INSTR_HI, ISAR))
+        || (decoded->op_code=OP_SHR,
+                TEST_OP(INSTR_HI, ISHR))
+        || (decoded->op_code=OP_SHR,
+                TEST_OP(INSTR_HI, ISHR))
+        || (decoded->op_code=OP_ROL,
+                TEST_OP(INSTR_HI, IROL))
+        || (decoded->op_code=OP_ROR,
+                TEST_OP(INSTR_HI, IROR))
+       ) {
+        const u8 bits_432 = (buf[cursor+1] >> 3) & 0b111;
+        new_cursor = decode_params(context, decoded, OPV_BASE, new_cursor, params);
+
+        switch (bits_432) {
+            case 0b100: // SAL/SHL (they're the same)
+#ifdef DEBUG
+        printf("[SAL] (CONFLICT CASE)\n"); __print_bits(bits_432);
+#endif
+            if (out != NULL) 
+                sprintf(out, "sal %s", params);
+            break;
+
+            case 0b101: // SHR
+#ifdef DEBUG
+        printf("[SHR] (CONFLICT CASE)\n"); __print_bits(bits_432);
+#endif
+            if (out != NULL) 
+                sprintf(out, "shr %s", params);
+            break;
+
+            case 0b111: // SAR
+#ifdef DEBUG
+        printf("[SAR] (CONFLICT CASE)\n"); __print_bits(bits_432);
+#endif
+            if (out != NULL) 
+                sprintf(out, "sar %s", params);
+            break;
+
+            case 0b000: // ROL
+#ifdef DEBUG
+        printf("[ROL] (CONFLICT CASE)\n"); __print_bits(bits_432);
+#endif
+            if (out != NULL) 
+                sprintf(out, "rol %s", params);
+            break;
+
+            case 0b001: // ROR
+#ifdef DEBUG
+        printf("[ROR] (CONFLICT CASE)\n"); __print_bits(bits_432);
+#endif
+            if (out != NULL) 
+                sprintf(out, "ror %s", params);
+            break;
+        }
+
+        context->pc++;
+
+        return new_cursor;
+    }
+
+    if (   (decoded->op_code=OP_XOR_REGMEM2REG,
+                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, IOR_IMM2ACC))
+        || (decoded->op_code=OP_OR_REGMEM2REG,
+                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IOR_REGMEM2REG))
+       ) {
+#ifdef DEBUG
+        printf("[OR] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
+#endif
+        new_cursor = decode_params(context, decoded, matched_variant, cursor, params);
+        if (out != NULL) 
+            sprintf(out, "or %s", params);
+
+        context->pc++;
+
+        return new_cursor;
+    }
+
+    if (   (decoded->op_code=OP_OR_IMM2ACC,
+                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, IOR_IMM2ACC))
+        || (decoded->op_code=OP_OR_REGMEM2REG,
+                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IOR_REGMEM2REG))
+       ) {
+#ifdef DEBUG
+        printf("[OR] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
+#endif
+        new_cursor = decode_params(context, decoded, matched_variant, cursor, params);
+        if (out != NULL) 
+            sprintf(out, "or %s", params);
+
+        context->pc++;
+
+        return new_cursor;
+    }
+
+    if (   (decoded->op_code=OP_NOT,
+                TEST_OP(INSTR_HI, INOT)) 
+        || (decoded->op_code=OP_MUL,
+                TEST_OP(INSTR_HI, IMUL))
+        || (decoded->op_code=OP_IMUL,
+                TEST_OP(INSTR_HI, IIMUL))
+        || (decoded->op_code=OP_DIV,
+                TEST_OP(INSTR_HI, IDIV))
+        || (decoded->op_code=OP_IMUL,
+                TEST_OP(INSTR_HI, IIDIV))
+       ) {
+        const u8 bits_432 = (buf[cursor+1] >> 3) & 0b111;
+        new_cursor = decode_params(context, decoded, OPV_BASE, new_cursor, params);
+
+        switch (bits_432) {
+            case 0b100: // MUL
+#ifdef DEBUG
+        printf("[MOV] (CONFLICT CASE)\n"); __print_bits(bits_432);
+#endif
+            if (out != NULL) 
+                sprintf(out, "mov %s", params);
+            break;
+
+            case 0b101: // IMUL
+#ifdef DEBUG
+        printf("[IMOV] (CONFLICT CASE)\n"); __print_bits(bits_432);
+#endif
+            if (out != NULL) 
+                sprintf(out, "imov %s", params);
+            break;
+
+            case 0b110: // DIV
+#ifdef DEBUG
+        printf("[DIV] (CONFLICT CASE)\n"); __print_bits(bits_432);
+#endif
+            if (out != NULL) 
+                sprintf(out, "div %s", params);
+            break;
+
+            case 0b111: // IDIV
+#ifdef DEBUG
+        printf("[IDIV] (CONFLICT CASE)\n"); __print_bits(bits_432);
+#endif
+            if (out != NULL) 
+                sprintf(out, "idiv %s", params);
+            break;
+        }
+
+        context->pc++;
+
+        return new_cursor;
+    }
+
+    if (   (decoded->op_code=OP_AND_IMM2ACC,
+                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, IAND_IMM2ACC))
+        || (decoded->op_code=OP_AND_REGMEM2REG,
+                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IAND_REGMEM2REG))
+       ) {
+#ifdef DEBUG
+        printf("[AND] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
+#endif
+        new_cursor = decode_params(context, decoded, matched_variant, cursor, params);
+        if (out != NULL) 
+            sprintf(out, "and %s", params);
+
+        context->pc++;
+
+        return new_cursor;
+    }
+
+    if (   (decoded->op_code=OP_XOR_REGMEM2REG,
+                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IXOR_REGMEM2REG))
+        || (decoded->op_code=OP_XOR_IMM2ACC,
+                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, IXOR_IMM2ACC))
+       ) {
+#ifdef DEBUG
+        printf("[XOR] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
+#endif
+        new_cursor = decode_params(context, decoded, matched_variant, cursor, params);
+        if (out != NULL) 
+            sprintf(out, "xor %s", params);
+
+        context->pc++;
+
+        return new_cursor;
+    }
+
+    if (   (decoded->op_code=OP_TEST_REGMEM2REG,
+                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, ITEST_REGMEM2REG))
+        || (decoded->op_code=OP_TEST_IMM2REGMEM,
+                matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_HI, ITEST_IMM2REGMEM))
+        || (decoded->op_code=OP_TEST_IMM2ACC,
+                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, ITEST_IMM2ACC))
+       ) {
+#ifdef DEBUG
+        printf("[TEST] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
+#endif
+        new_cursor = decode_params(context, decoded, matched_variant, cursor, params);
+        if (out != NULL) 
+            sprintf(out, "test %s", params);
+
+        context->pc++;
+
+        return new_cursor;
+    }
+
     if (   (decoded->op_code=OP_LOOP,
                 matched_variant=OPV_JMP, TEST_OP(INSTR_HI, ILOOP))
         || (decoded->op_code=OP_LOOPZ,
@@ -1045,6 +1250,12 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
                 TEST_OP(INSTR_HI, IADD_IMM2REGMEM))
         || (decoded->op_code=OP_SUB_IMM_FROM_REGMEM,
                 TEST_OP(INSTR_HI, ISUB_IMM_FROM_REGMEM))
+        || (decoded->op_code=OP_AND_IMM2REGMEM,
+                TEST_OP(INSTR_HI, IAND_IMM2REGMEM))
+        || (decoded->op_code=OP_XOR_IMM2REGMEM,
+                TEST_OP(INSTR_HI, IXOR_IMM2REGMEM))
+        || (decoded->op_code=OP_OR_IMM2REGMEM,
+                TEST_OP(INSTR_HI, IOR_IMM2REGMEM))
         || (decoded->op_code=OP_CMP_IMM_WITH_REGMEM,
                 TEST_OP(INSTR_HI, ICMP_IMM_WITH_REGMEM))) {
         new_cursor = decode_params(context, decoded, OPV_IMM2REGMEM_SOURCEBIT, new_cursor, params);
@@ -1061,7 +1272,6 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #endif
             if (out != NULL)
                 sprintf(out, "add %s", params);
-            decoded->op_code = OP_ADD_IMM2REGMEM;
             break;
         case 0b101: // SUB
 #ifdef DEBUG
@@ -1069,7 +1279,6 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #endif
             if (out != NULL) 
                 sprintf(out, "sub %s", params);
-            decoded->op_code = OP_SUB_IMM_FROM_REGMEM;
             break;
         case 0b111: // CMP 
 #ifdef DEBUG
@@ -1077,7 +1286,27 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #endif
             if (out != NULL) 
                 sprintf(out, "cmp %s", params);
-            decoded->op_code = OP_CMP_IMM_WITH_REGMEM;
+            break;
+        case 0b100: // AND
+#ifdef DEBUG
+        printf("[AND] (CONFLICT CASE)\n"); __print_bits(bits_432);
+#endif
+            if (out != NULL) 
+                sprintf(out, "and %s", params);
+            break;
+        case 0b001: // OR
+#ifdef DEBUG
+        printf("[OR] (CONFLICT CASE)\n"); __print_bits(bits_432);
+#endif
+            if (out != NULL) 
+                sprintf(out, "or %s", params);
+            break;
+        case 0b110: // XOR
+#ifdef DEBUG
+        printf("[XOR] (CONFLICT CASE)\n"); __print_bits(bits_432);
+#endif
+            if (out != NULL) 
+                sprintf(out, "xor %s", params);
             break;
         }
 
