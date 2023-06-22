@@ -550,6 +550,38 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
             }
             break;
 
+        case OP_SHL:
+        case OP_SAL:
+            assert(destination_operand.type == OperandRegister
+                    || destination_operand.type == OperandMemory
+                    || destination_operand.type == OperandMemoryOffset
+                    || destination_operand.type == OperandMemoryOffset8
+                    || destination_operand.type == OperandMemoryOffset16);
+            u32 shift_amount = source_operand.type == OperandRegister
+                ? processor_short_reg_get(cpu, REG_CL)
+                : source_operand.imm.value;
+            if (destination_operand.type == OperandRegister) {
+                u16 value = cpu->registers[reg_dst] << shift_amount;
+                processor_write_imm_2_reg(cpu, reg_dst, value, instruction.is_wide);
+            } else if (destination_operand.type == OperandMemory) {
+                u32 offset = destination_offset;
+                u16 value = cpu->memory[offset] << shift_amount;
+                processor_write_imm_2_mem(cpu, offset, value);
+            } else if (destination_operand.type == OperandMemoryOffset) {
+                u32 offset = MEM_REGS_OFFSET;
+                u16 value = cpu->memory[offset] << shift_amount;
+                processor_write_imm_2_mem(cpu, offset, value);
+            } else if (destination_operand.type == OperandMemoryOffset8) {
+                u32 offset = MEM_REGS_OFFSET8;
+                u16 value = cpu->memory[offset] << shift_amount;
+                processor_write_imm_2_mem(cpu, offset, value);
+            } else if (destination_operand.type == OperandMemoryOffset16) {
+                u32 offset = MEM_REGS_OFFSET16;
+                u16 value = cpu->memory[offset] << shift_amount;
+                processor_write_imm_2_mem(cpu, offset, value);
+            }
+            break;
+
         case OP_JE:
         case OP_JZ:
             assert(destination_operand.type == OperandImmediate);
