@@ -85,13 +85,15 @@ void processor_set_flags(processor_t *cpu, u16 value) {
 }
 
 static
-u8 processor_mov_memory(processor_t *cpu, const instruction_t instruction) {
+u8 processor_mov_memory(processor_t *cpu,
+    const instruction_t instruction) {
     return TRUE;
 }
 
 static inline
 void processor_write_reg_2_mem(processor_t *cpu,
         const u32 mem_offset, const u16 reg, const u8 is_wide) {
+    assert(mem_offset > cpu->program_size && "Can't write program memory");
     if (!is_wide) {
         cpu->memory[mem_offset] = processor_short_reg_get(cpu, reg);
     } else {
@@ -106,9 +108,11 @@ void processor_write_reg_2_mem(processor_t *cpu,
 static inline
 void processor_write_imm_2_mem(processor_t *cpu,
         const u32 mem_offset, const u16 immediate) {
+    assert(mem_offset > cpu->program_size && "Can't write program memory");
     cpu->memory[mem_offset] = immediate;
 #ifdef CPU_DEBUG
-    printf("[CPU] wrote immediate %d to mem location %d\n", immediate, mem_offset);
+    printf("[CPU] wrote immediate %d to mem location %d\n",
+        immediate, mem_offset);
     processor_state_dump(cpu, stdout);
 #endif
 }
@@ -147,7 +151,8 @@ void processor_write_reg_2_reg(processor_t *cpu,
         const u16 reg_dst, const u16 reg_src, const u8 is_wide) {
     cpu->registers[reg_dst] = cpu->registers[reg_src];
     if (!is_wide) {
-        processor_short_reg_set(cpu, reg_dst, processor_short_reg_get(cpu, reg_src));
+        processor_short_reg_set(cpu, reg_dst,
+            processor_short_reg_get(cpu, reg_src));
     } else {
         cpu->registers[reg_dst] = cpu->registers[reg_src];
     }
@@ -159,7 +164,8 @@ void processor_write_reg_2_reg(processor_t *cpu,
 
 static
 u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code, 
-        const operand_t destination_operand, const operand_t source_operand, const u8 is_wide) {
+        const operand_t destination_operand,const operand_t source_operand,
+        const u8 is_wide) {
     const u8 source_offset_reg_1 = source_operand.offset.regs[0];
     const u8 source_offset_reg_2 = source_operand.offset.regs[1];
     const u8 destination_offset_reg_1 = destination_operand.offset.regs[0];
@@ -172,14 +178,14 @@ u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code,
 
 #define MEM_REGS_OFFSET \
     (cpu->registers[destination_offset_reg_1] \
-     + destination_operand.offset.n_regs > 1 \
+     + (destination_operand.offset.n_regs > 1 \
         ? cpu->registers[destination_offset_reg_2] \
-        : 0)
+        : 0))
 #define MEM_REGS_OFFSET8 \
      (cpu->registers[destination_offset_reg_1] \
      + (destination_operand.offset.n_regs > 1 \
          ? cpu->registers[destination_offset_reg_2] \
-         : 0) + destination_offset & 0xFF)
+         : 0) + (destination_offset & 0xFF))
 #define MEM_REGS_OFFSET16 \
      (cpu->registers[destination_offset_reg_1] \
      + (destination_operand.offset.n_regs > 1 \
@@ -231,7 +237,8 @@ u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code,
         if (destination_operand.type == OperandRegister) {
             processor_write_imm_2_reg(cpu, reg_dst, source_immediate, is_wide);
         } else if (destination_operand.type == OperandMemory) {
-            processor_write_imm_2_mem(cpu, destination_offset, source_immediate);
+            processor_write_imm_2_mem(cpu,
+                destination_offset, source_immediate);
         } else if (destination_operand.type == OperandMemoryOffset) {
             u32 offset = MEM_REGS_OFFSET;
             processor_write_imm_2_mem(cpu, offset, source_immediate);
@@ -282,7 +289,24 @@ u32 processor_init(processor_t *cpu, const u8 *program, const u32 size) {
     return 1;
 }
 
-u32 processor_fetch_instruction(processor_t *cpu, instruction_t *instruction, char *out) {
+static
+void __print_bits(const u32 n) {
+    u8 len = sizeof(n) * 8;
+    while (len--) {
+        if ((len+1) % 8 == 0 && (len+1) < sizeof(n) * 8) {
+            printf(" ");
+        }
+        printf("%c", ((n >> len) & 0x1) ? '1' : '0');
+    }
+    printf("\n");
+}
+
+u32 processor_fetch_instruction(processor_t *cpu,
+    instruction_t *instruction, char *out) {
+#ifdef DEBUG
+    printf("[INSTR_HI] Next instruction: ");
+    __print_bits(cpu->memory[cpu->ip]);
+#endif
     const u32 new_ip = decode(&(cpu->decoder_ctx), instruction, cpu->ip, out);
     assert(new_ip < __CPU_MEM_SIZE
             && "new IP value must be within buffer bounds");
@@ -309,6 +333,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
     const u16 source_offset = source_operand.offset.offset;
     const u16 destination_offset = destination_operand.offset.offset;
     const u16 source_immediate = source_operand.imm.value;
+    const u8 instr_width = cpu->ip - instruction.ip;
 
 #define MEM_REGS_OFFSET \
     (cpu->registers[destination_offset_reg_1] \
@@ -333,7 +358,8 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
         case OP_MOV_IMM2REGMEM:
         case OP_MOV_MEM2ACC:
             if (!processor_exec_mov(cpu, instruction.op_code,
-                        destination_operand, source_operand, instruction.is_wide)) {
+                        destination_operand, source_operand,
+                        instruction.is_wide)) {
                 goto unimplemented;
             }
             break;
@@ -530,7 +556,8 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
                     || destination_operand.type == OperandMemoryOffset16);
             if (destination_operand.type == OperandRegister) {
                 u16 value = !cpu->registers[reg_dst];
-                processor_write_imm_2_reg(cpu, reg_dst, !source_immediate, instruction.is_wide);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    !source_immediate, instruction.is_wide);
             } else if (destination_operand.type == OperandMemory) {
                 u16 offset = destination_offset;
                 u16 value = !cpu->memory[offset];
@@ -551,7 +578,7 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
             break;
 
         case OP_SHL:
-        case OP_SAL:
+        case OP_SAL: {
             assert(destination_operand.type == OperandRegister
                     || destination_operand.type == OperandMemory
                     || destination_operand.type == OperandMemoryOffset
@@ -562,7 +589,8 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
                 : source_operand.imm.value;
             if (destination_operand.type == OperandRegister) {
                 u16 value = cpu->registers[reg_dst] << shift_amount;
-                processor_write_imm_2_reg(cpu, reg_dst, value, instruction.is_wide);
+                processor_write_imm_2_reg(cpu, reg_dst, value,
+                    instruction.is_wide);
             } else if (destination_operand.type == OperandMemory) {
                 u32 offset = destination_offset;
                 u16 value = cpu->memory[offset] << shift_amount;
@@ -581,26 +609,66 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
                 processor_write_imm_2_mem(cpu, offset, value);
             }
             break;
+        }
+
+        case OP_SHR:
+        case OP_SAR: {
+            assert(destination_operand.type == OperandRegister
+                    || destination_operand.type == OperandMemory
+                    || destination_operand.type == OperandMemoryOffset
+                    || destination_operand.type == OperandMemoryOffset8
+                    || destination_operand.type == OperandMemoryOffset16);
+            u32 shift_amount = source_operand.type == OperandRegister
+                ? processor_short_reg_get(cpu, REG_CL)
+                : source_operand.imm.value;
+            if (destination_operand.type == OperandRegister) {
+                u16 value = __CPU_RIGHT_SHIFT_16(cpu->registers[reg_dst],
+                    shift_amount);
+                processor_write_imm_2_reg(cpu, reg_dst, value,
+                    instruction.is_wide);
+            } else if (destination_operand.type == OperandMemory) {
+                u32 offset = destination_offset;
+                u16 value = __CPU_RIGHT_SHIFT_16(cpu->memory[offset],
+                    shift_amount);
+                processor_write_imm_2_mem(cpu, offset, value);
+            } else if (destination_operand.type == OperandMemoryOffset) {
+                u32 offset = MEM_REGS_OFFSET;
+                u16 value = __CPU_RIGHT_SHIFT_16(cpu->memory[offset],
+                    shift_amount);
+                processor_write_imm_2_mem(cpu, offset, value);
+            } else if (destination_operand.type == OperandMemoryOffset8) {
+                u32 offset = MEM_REGS_OFFSET8;
+                u16 value = __CPU_RIGHT_SHIFT_16(cpu->memory[offset],
+                    shift_amount);
+                processor_write_imm_2_mem(cpu, offset, value);
+            } else if (destination_operand.type == OperandMemoryOffset16) {
+                u32 offset = MEM_REGS_OFFSET16;
+                u16 value = __CPU_RIGHT_SHIFT_16(cpu->memory[offset],
+                    shift_amount);
+                processor_write_imm_2_mem(cpu, offset, value);
+            }
+            break;
+        }
 
         case OP_JE:
         case OP_JZ:
             assert(destination_operand.type == OperandImmediate);
             if (cpu->flags & FLAG_ZERO)
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
 
         case OP_JL:
         case OP_JNGE:
             assert(destination_operand.type == OperandImmediate);
             if ((cpu->flags & FLAG_SIGN ? 1 : 0) ^ (cpu->flags & FLAG_OVERFLOW ? 1 : 0))
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
 
         case OP_JNL:
         case OP_JGE:
             assert(destination_operand.type == OperandImmediate);
             if ((cpu->flags & FLAG_SIGN ? 1 : 0) == (cpu->flags & FLAG_OVERFLOW ? 1 : 0))
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
 
         case OP_JB:
@@ -608,48 +676,48 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
             // case OP_JC:
             assert(destination_operand.type == OperandImmediate);
             if (cpu->flags & FLAG_CARRY)
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
 
         case OP_JBE:
         case OP_JNA:
             assert(destination_operand.type == OperandImmediate);
             if ((cpu->flags & FLAG_CARRY) || (cpu->flags & FLAG_ZERO))
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
 
         case OP_JP:
         case OP_JPE:
             assert(destination_operand.type == OperandImmediate);
             if (cpu->flags & FLAG_PARITY)
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
 
         case OP_JO:
             assert(destination_operand.type == OperandImmediate);
             if (cpu->flags & FLAG_OVERFLOW)
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
         case OP_JNO:
             assert(destination_operand.type == OperandImmediate);
             if (!(cpu->flags & FLAG_OVERFLOW))
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
 
         case OP_JS:
             assert(destination_operand.type == OperandImmediate);
             if (cpu->flags & FLAG_SIGN)
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
         case OP_JNS:
             assert(destination_operand.type == OperandImmediate);
             if (!(cpu->flags & FLAG_SIGN))
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
 
         case OP_JNZ:
         case OP_JNE:
             assert(destination_operand.type == OperandImmediate);
             if (!(cpu->flags & FLAG_ZERO))
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
 
         case OP_JLE:
@@ -657,53 +725,54 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
             assert(destination_operand.type == OperandImmediate);
             if ((cpu->flags & FLAG_ZERO) ||
                 ((cpu->flags & FLAG_SIGN ? 1 : 0) ^ (cpu->flags & FLAG_OVERFLOW ? 1 : 0)))
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
         case OP_JG:
         case OP_JNLE:
             assert(destination_operand.type == OperandImmediate);
             if (!(cpu->flags & FLAG_ZERO) &&
                 (cpu->flags & FLAG_SIGN ? 1 : 0) == (cpu->flags & FLAG_OVERFLOW ? 1 : 0))
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
 
         case OP_JNBE:
         case OP_JA:
             assert(destination_operand.type == OperandImmediate);
             if (!(cpu->flags & FLAG_CARRY) && !(cpu->flags & FLAG_ZERO))
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
 
         case OP_JNP:
         case OP_JPO:
             assert(destination_operand.type == OperandImmediate);
             if (!(cpu->flags & FLAG_PARITY))
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
 
         case OP_JCXZ:
             assert(destination_operand.type == OperandImmediate);
             if (!(cpu->registers[REG_CX]))
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
 
         case OP_LOOP:
             assert(destination_operand.type == OperandImmediate);
-            if (--cpu->registers[REG_CX] > 0) {
-                __CPU_JUMP(destination_operand.imm.value);
+            if (cpu->registers[REG_CX] - 1> 0) {
+                cpu->registers[REG_CX]--;
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             }
             break;
 
         case OP_LOOPZ:
             assert(destination_operand.type == OperandImmediate);
             if (cpu->flags & FLAG_ZERO)
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
 
         case OP_LOOPNZ:
             assert(destination_operand.type == OperandImmediate);
             if (!(cpu->flags & FLAG_ZERO))
-                __CPU_JUMP(destination_operand.imm.value);
+                __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
 
         default:

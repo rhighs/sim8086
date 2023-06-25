@@ -417,8 +417,11 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded,
 #ifdef DEBUG
         printf("DATA-8: "); __print_bits(data8);
 #endif
-        if (out != NULL)
+
+        if (out != NULL) {
+            regcode_to_str(REG, W, reg);
             sprintf(out, "%s, %d", reg, W ? data16 : data8);
+        }
     } else if (variant == OPV_ACC2MEM) {
         const u8 W        = (instr & 0b0000000100000000) >> 8;
         const u16 addr_lo = (instr & 0b0000000011111111);

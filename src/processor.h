@@ -27,6 +27,8 @@
 #define REG_DH 6
 #define REG_BH 7
 
+#define __CPU_STACK_SIZE 64 * 64 * 16 // 64KB
+
 #define __CPU_MEM_SIZE 1024 * 1024
 
 #define __CPU_U8_SIGN_BIT 0x80
@@ -35,24 +37,35 @@
 
 #define __CPU_IP2ISNTRNO_NONE UINT32_MAX
 
+#define __CPU_RIGHT_SHIFT_16(VALUEU16, BY) \
+    ((VALUEU16 & 0x8000) ? (VALUEU16 >> BY) | (0xFFFF << (16 - BY)) : VALUEU16 >> BY)
+
+#define __CPU_RIGHT_SHIFT_8(VALUEU8, BY) \
+    ((VALUEU8 & 0x80) ? (VALUEU8 >> BY) | (0xFF << (8 - BY)) : VALUEU8 >> BY)
 
 #ifdef CPU_DEBUG
-    #define __CPU_JUMP(__DISP)\
+    #define __CPU_JUMP(__DISP, INSTR_WIDTH) \
+    {\
+    const u8 width = INSTR_WIDTH; \
     if (__DISP&__CPU_U8_SIGN_BIT) {\
         const u8 displ = abs((i8)(__DISP));\
-        cpu->ip-=displ;\
+        cpu->ip-=(displ);\
         printf("[CPU]: jumped -%d\n", displ);\
     } else {\
         const u8 displ = __DISP;\
-        cpu->ip+=displ;\
+        cpu->ip+=(displ);\
         printf("[CPU]: jumped +%d\n", displ);\
+    }\
     }
-#else
-    #define __CPU_JUMP(__DISP)\
+#else 
+    #define __CPU_JUMP(__DISP, INSTR_WIDTH)\
+    { \
+    const u8 width = INSTR_WIDTH; \
     if (__DISP&__CPU_U8_SIGN_BIT) {\
-        cpu->ip-=abs((i8)(__DISP));\
+        cpu->ip-=(abs((i8)(__DISP)));\
     } else {\
-        cpu->ip+=__DISP;\
+        cpu->ip+=(__DISP);\
+    } \
     }
 #endif
 
@@ -71,6 +84,7 @@ typedef struct {
 
     u32 program_size;
     u8 *memory;
+    u16 stack[__CPU_STACK_SIZE/2];
 
     // Stuff related to ip state tracking
     u32 ip;
