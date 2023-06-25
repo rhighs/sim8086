@@ -9,6 +9,7 @@
 #include "decoder.h"
 #include "instruction.h"
 
+static
 u8 opcode_len(u8 opcode) {
     u8 len = 8;
 
@@ -58,6 +59,7 @@ u8 opcode_len(u8 opcode) {
     return len;
 }
 
+static
 const char* instr2str(const u8 instruction, const u8 opt_pattern) {
     switch (instruction) {
     case SAME_OPCODE_OPS:
@@ -110,6 +112,7 @@ const char* instr2str(const u8 instruction, const u8 opt_pattern) {
     return "unreachable";
 }
 
+static
 const char* opv_str(op_variants_t opv) {
     switch (opv) {
     case OPV_BASE: return "OPV_BASE";
@@ -124,6 +127,7 @@ const char* opv_str(op_variants_t opv) {
     return "";
 }
 
+static
 void __print_bits(const u32 n) {
     u8 len = sizeof(n) * 8;
     while (len--) {
@@ -135,6 +139,7 @@ void __print_bits(const u32 n) {
     printf("\n");
 }
 
+static
 void regcode_to_str(const u8 code, const u8 w_bit, char *out) {
     char *__out;
     if (!w_bit) switch (code) {
@@ -178,6 +183,21 @@ typedef struct {
 } jmp_locations_t;
 jmp_locations_t jmp_locations;
 
+static
+u32 jmp_loc2label(const decoder_context_t *context, char *dst,
+        const u32 location) {
+    for (u32 label_location=0;
+         label_location<jmp_locations.len; 
+         label_location++) {
+        if (context->cursor2pc[jmp_locations.buf[label_location]] == location) {
+            strcpy(dst, jmp_locations.labels[label_location]);
+            return strlen(dst);
+        }
+    }
+    return 0;
+}
+
+static
 void init_jmp(const u32 len) {
     jmp_locations.buf = (u32 *)malloc(sizeof(u32) * len);
     jmp_locations.cap = len;
@@ -192,6 +212,7 @@ void init_jmp(const u32 len) {
     }
 }
 
+static
 u8 check_jmp(u32 location) {
     for (u32 i=0; i < jmp_locations.len; i++) {
         if(jmp_locations.buf[i] == location)
@@ -200,6 +221,7 @@ u8 check_jmp(u32 location) {
     return 0;
 }
 
+static
 void jmp_set(u32 location) {
     assert(jmp_locations.len < jmp_locations.cap);
     jmp_locations.buf[jmp_locations.len] = location;
@@ -208,6 +230,7 @@ void jmp_set(u32 location) {
     jmp_locations.len += 1;
 }
 
+static
 u32 decode_jmps(decoder_context_t *context, instruction_t *decoded,
         const u32 cursor, const u8 jmp_code, char *out) { 
 
@@ -225,6 +248,9 @@ u32 decode_jmps(decoder_context_t *context, instruction_t *decoded,
     case IJMP_DIRECT_INTER_SEG: 
         assert(0 && "Unimplemented!");
         break;
+    case ILOOP:   if (op_code==OP_NOOP) op_code=OP_LOOP;
+    case ILOOPZ:  if (op_code==OP_NOOP) op_code=OP_LOOPZ;
+    case ILOOPNZ: if (op_code==OP_NOOP) op_code=OP_LOOPNZ;
     case IJE:     if (op_code==OP_NOOP) op_code=OP_JE;
     case IJL:     if (op_code==OP_NOOP) op_code=OP_JL;
     case IJLE:    if (op_code==OP_NOOP) op_code=OP_JLE;
@@ -316,14 +342,14 @@ void decode_rm_complex_operand(operand_t *operand, const u8 RM,
     }
 }
 
+static
 u32 decode_params(decoder_context_t *context, instruction_t *decoded,
         op_variants_t variant, const u32 cursor, char *out) {
 
     const u8 *buf = context->buf;
-
-    u16 hi = (u16)(buf[cursor]) << 8;
-    u16 lo = (u16)(buf[cursor+1]);
-    u16 instr = hi | lo;
+    const u16 hi = (u16)(buf[cursor]) << 8;
+    const u16 lo = (u16)(buf[cursor+1]);
+    const u16 instr = hi | lo;
     const u8 INSTR_HI = (instr >> 8);
     const u8 INSTR_LO = (instr & 0xFF);
 
@@ -568,9 +594,9 @@ decode_cmp:
         source_operand->imm.value = data16;
     } else if (variant == OPV_IMM2REGMEM_SOURCEBIT) {
         const u8 S   = (instr & 0b0000001000000000) >> 9;
-        const u8 REG = (instr & 0b0000000000111000) >> 3;
         const u8 W   = (instr & 0b0000000100000000) >> 8;
         const u8 MOD = (instr & 0b0000000011000000) >> 6;
+        const u8 REG = (instr & 0b0000000000111000) >> 3;
         const u8 RM  = (instr & 0b0000000000000111);
 
         const u16 OPT_1 = (u16)(buf[cursor + 2]);
@@ -854,11 +880,12 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
         const u32 cursor, char *out) {
 
     const u8 *buf = context->buf;
-
-    u16 hi = (u16)(buf[cursor]) << 8;
-    u16 lo = (u16)(buf[cursor+1]);
-    u16 instr = hi | lo;
+    const u16 hi = (u16)(buf[cursor]) << 8;
+    const u16 lo = (u16)(buf[cursor+1]);
+    const u16 instr = hi | lo;
     const u8 INSTR_HI = (instr >> 8);
+    const u8 INSTR_LO = (instr & 0xFF);
+    const u8 bits_432 = (INSTR_LO >> 3) & 0b111;
     u32 new_cursor = cursor;
 
 #ifdef DEBUG
@@ -955,8 +982,6 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
     printf("TEST_OP(INSTR_HI, ICMP_IMM_WITH_REGMEM):  %d\n", TEST_OP(INSTR_HI, ICMP_IMM_WITH_REGMEM));
 #endif
 
-    const u8 bits_432 = (buf[cursor+1] >> 3) & 0b111;
-
     if (   (decoded->op_code=OP_CMP_IMM_WITH_ACC,
                 matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_HI, ICMP_IMM_WITH_ACC))
         || (decoded->op_code=OP_CMP_REGMEM_REG,
@@ -1017,29 +1042,23 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
         return new_cursor;
     }
 
-    if (   (decoded->op_code=OP_SAL,
-                TEST_OP(INSTR_HI, ISAL))
-        || (decoded->op_code=OP_SHL,
-                TEST_OP(INSTR_HI, ISHL))
-        || (decoded->op_code=OP_SAR,
-                TEST_OP(INSTR_HI, ISAR))
-        || (decoded->op_code=OP_SHR,
-                TEST_OP(INSTR_HI, ISHR))
-        || (decoded->op_code=OP_SHR,
-                TEST_OP(INSTR_HI, ISHR))
-        || (decoded->op_code=OP_ROL,
-                TEST_OP(INSTR_HI, IROL))
-        || (decoded->op_code=OP_ROR,
-                TEST_OP(INSTR_HI, IROR))
+    if (   TEST_OP(INSTR_HI, ISAL)
+        || TEST_OP(INSTR_HI, ISHL)
+        || TEST_OP(INSTR_HI, ISAR)
+        || TEST_OP(INSTR_HI, ISHR)
+        || TEST_OP(INSTR_HI, ISHR)
+        || TEST_OP(INSTR_HI, IROL)
+        || TEST_OP(INSTR_HI, IROR)
        ) {
-        const u8 bits_432 = (buf[cursor+1] >> 3) & 0b111;
-        new_cursor = decode_params(context, decoded, OPV_BASE, new_cursor, params);
+        new_cursor = decode_params(context, decoded, OPV_BASE,
+            new_cursor, params);
 
         switch (bits_432) {
             case 0b100: // SAL/SHL (they're the same)
 #ifdef DEBUG
         printf("[SAL] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
+            decoded->op_code=OP_SAL;
             if (out != NULL) 
                 sprintf(out, "sal %s", params);
             break;
@@ -1048,6 +1067,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #ifdef DEBUG
         printf("[SHR] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
+            decoded->op_code=OP_SHR;
             if (out != NULL) 
                 sprintf(out, "shr %s", params);
             break;
@@ -1056,6 +1076,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #ifdef DEBUG
         printf("[SAR] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
+            decoded->op_code=OP_SAR;
             if (out != NULL) 
                 sprintf(out, "sar %s", params);
             break;
@@ -1064,6 +1085,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #ifdef DEBUG
         printf("[ROL] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
+            decoded->op_code=OP_ROL;
             if (out != NULL) 
                 sprintf(out, "rol %s", params);
             break;
@@ -1072,6 +1094,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #ifdef DEBUG
         printf("[ROR] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
+            decoded->op_code=OP_ROR;
             if (out != NULL) 
                 sprintf(out, "ror %s", params);
             break;
@@ -1116,25 +1139,28 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
         return new_cursor;
     }
 
-    if (   (decoded->op_code=OP_NOT,
-                TEST_OP(INSTR_HI, INOT)) 
-        || (decoded->op_code=OP_MUL,
-                TEST_OP(INSTR_HI, IMUL))
-        || (decoded->op_code=OP_IMUL,
-                TEST_OP(INSTR_HI, IIMUL))
-        || (decoded->op_code=OP_DIV,
-                TEST_OP(INSTR_HI, IDIV))
-        || (decoded->op_code=OP_IMUL,
-                TEST_OP(INSTR_HI, IIDIV))
-       ) {
-        const u8 bits_432 = (buf[cursor+1] >> 3) & 0b111;
+    if (   TEST_OP(INSTR_HI, INOT)
+        || TEST_OP(INSTR_HI, IMUL)
+        || TEST_OP(INSTR_HI, IIMUL)
+        || TEST_OP(INSTR_HI, IDIV)
+        || TEST_OP(INSTR_HI, IIDIV)) {
         new_cursor = decode_params(context, decoded, OPV_BASE, new_cursor, params);
 
         switch (bits_432) {
+            case 0b010:
+#ifdef DEBUG
+        printf("[NOT] (CONFLICT CASE)\n"); __print_bits(bits_432);
+#endif
+            decoded->op_code=OP_NOT;
+            if (out != NULL) 
+                sprintf(out, "not %s", params);
+            break;
+
             case 0b100: // MUL
 #ifdef DEBUG
         printf("[MOV] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
+            decoded->op_code=OP_MUL;
             if (out != NULL) 
                 sprintf(out, "mov %s", params);
             break;
@@ -1143,6 +1169,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #ifdef DEBUG
         printf("[IMOV] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
+            decoded->op_code=OP_IMUL;
             if (out != NULL) 
                 sprintf(out, "imov %s", params);
             break;
@@ -1151,6 +1178,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #ifdef DEBUG
         printf("[DIV] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
+            decoded->op_code=OP_DIV;
             if (out != NULL) 
                 sprintf(out, "div %s", params);
             break;
@@ -1159,6 +1187,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #ifdef DEBUG
         printf("[IDIV] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
+            decoded->op_code=OP_IDIV;
             if (out != NULL) 
                 sprintf(out, "idiv %s", params);
             break;
@@ -1235,7 +1264,12 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
         // decode loops
         char params[32];
         const char* instr_str = instr2str(INSTR_HI, NONE);
+        new_cursor = decode_jmps(context, decoded, cursor, INSTR_HI, params);
         assert(instr_str[0] == 'l' && "instruction name must start with 'l'");
+        if (out != NULL) 
+            sprintf(out, "%s %s", instr_str, params);
+
+        context->pc++;
 
         decoded->operands[0].type = OperandImmediate;
         decoded->operands[0].imm.value = buf[cursor+1];
@@ -1246,20 +1280,13 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
     }
 
     // Check for opcodes with the same value (other flags must differ)
-    if (   (decoded->op_code=OP_ADD_IMM2REGMEM,
-                TEST_OP(INSTR_HI, IADD_IMM2REGMEM))
-        || (decoded->op_code=OP_SUB_IMM_FROM_REGMEM,
-                TEST_OP(INSTR_HI, ISUB_IMM_FROM_REGMEM))
-        || (decoded->op_code=OP_AND_IMM2REGMEM,
-                TEST_OP(INSTR_HI, IAND_IMM2REGMEM))
-        || (decoded->op_code=OP_XOR_IMM2REGMEM,
-                TEST_OP(INSTR_HI, IXOR_IMM2REGMEM))
-        || (decoded->op_code=OP_OR_IMM2REGMEM,
-                TEST_OP(INSTR_HI, IOR_IMM2REGMEM))
-        || (decoded->op_code=OP_CMP_IMM_WITH_REGMEM,
-                TEST_OP(INSTR_HI, ICMP_IMM_WITH_REGMEM))) {
+    if (   TEST_OP(INSTR_HI, IADD_IMM2REGMEM)
+        || TEST_OP(INSTR_HI, ISUB_IMM_FROM_REGMEM)
+        || TEST_OP(INSTR_HI, IAND_IMM2REGMEM)
+        || TEST_OP(INSTR_HI, IXOR_IMM2REGMEM)
+        || TEST_OP(INSTR_HI, IOR_IMM2REGMEM)
+        || TEST_OP(INSTR_HI, ICMP_IMM_WITH_REGMEM)) {
         new_cursor = decode_params(context, decoded, OPV_IMM2REGMEM_SOURCEBIT, new_cursor, params);
-        const u8 bits_432 = (buf[cursor+1] >> 3) & 0b111;
 
 #ifdef DEBUG
         printf("[CONFLICT_CASE]: "); __print_bits(bits_432);
@@ -1270,6 +1297,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #ifdef DEBUG
         printf("[ADD] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
+        decoded->op_code=OP_ADD_IMM2REGMEM;
             if (out != NULL)
                 sprintf(out, "add %s", params);
             break;
@@ -1277,6 +1305,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #ifdef DEBUG
         printf("[SUB] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
+        decoded->op_code=OP_SUB_IMM_FROM_REGMEM;
             if (out != NULL) 
                 sprintf(out, "sub %s", params);
             break;
@@ -1284,6 +1313,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #ifdef DEBUG
         printf("[CMP] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
+            decoded->op_code=OP_CMP_IMM_WITH_REGMEM;
             if (out != NULL) 
                 sprintf(out, "cmp %s", params);
             break;
@@ -1291,6 +1321,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #ifdef DEBUG
         printf("[AND] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
+            decoded->op_code=OP_AND_IMM2REGMEM;
             if (out != NULL) 
                 sprintf(out, "and %s", params);
             break;
@@ -1298,6 +1329,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #ifdef DEBUG
         printf("[OR] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
+            decoded->op_code=OP_OR_IMM2REGMEM;
             if (out != NULL) 
                 sprintf(out, "or %s", params);
             break;
@@ -1305,6 +1337,7 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #ifdef DEBUG
         printf("[XOR] (CONFLICT CASE)\n"); __print_bits(bits_432);
 #endif
+            decoded->op_code=OP_XOR_IMM2REGMEM;
             if (out != NULL) 
                 sprintf(out, "xor %s", params);
             break;
@@ -1332,7 +1365,7 @@ u32 decoder_init(decoder_context_t *context,
     return 1;
 }
 
-void destroy(decoder_context_t *context) {
+void decoder_destroy(decoder_context_t *context) {
     assert(context != NULL);
     free((void *)context->buf);
     free((void *)context->cursor2pc);
@@ -1340,17 +1373,3 @@ void destroy(decoder_context_t *context) {
     context->buf = NULL;
     context->buflen = 0;
 }
-
-u32 jmp_loc2label(const decoder_context_t *context, char *dst,
-        const u32 location) {
-    for (u32 label_location=0;
-         label_location<jmp_locations.len; 
-         label_location++) {
-        if (context->cursor2pc[jmp_locations.buf[label_location]] == location) {
-            strcpy(dst, jmp_locations.labels[label_location]);
-            return strlen(dst);
-        }
-    }
-    return 0;
-}
-

@@ -66,16 +66,9 @@ typedef struct {
 
 u32 decoder_init(decoder_context_t *context, const u8 *program, const u32 size);
 
-u32 jmp_loc2label(const decoder_context_t *context, char *dst,
-        const u32 location);
+void decoder_destroy(decoder_context_t *context);
 
 u32 decode(decoder_context_t *context, instruction_t *decoded_construct,
         const u32 cursor, char *out);
-
-u32 decode_params(decoder_context_t *context, instruction_t *decoded_construct,
-        op_variants_t variant, const u32 cursor, char *out);
-
-u32 decode_jmps(decoder_context_t *context, instruction_t *decoded_construct,
-        const u32 cursor, const u8 jmp_code, char *out);
 
 #endif
