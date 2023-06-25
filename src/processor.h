@@ -137,4 +137,12 @@ void processor_state_dump(processor_t *cpu, FILE *dump_file);
  */
 void processor_mem_dump(processor_t *cpu, FILE *dump_file);
 
+/*
+ * Estimates the number of clocks it will take for the
+ * cpu to run a specific instruction
+ *
+ * instruction       A decoded instruction
+ */
+u32 processor_clocks_for(const instruction_t instruction);
+
 #endif

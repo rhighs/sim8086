@@ -262,6 +262,10 @@ u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code,
     return TRUE;
 }
 
+u32 processor_clocks_for(const instruction_t instruction) {
+    return NONE;
+}
+
 u32 processor_init(processor_t *cpu, const u8 *program, const u32 size) {
     assert(cpu != NULL && program != NULL);
     assert(size < __CPU_MEM_SIZE && "Executable must be less than 64KB");

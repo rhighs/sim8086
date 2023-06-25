@@ -23,14 +23,26 @@ i32 main(u32 argc, char *argv[]) {
     if (file == NULL)
         goto bad_path_error;
 
+    u8 show_runtime_asm = FALSE;
+    u8 show_clocks = FALSE;
+
     // Parse command line arguments
     for (u32 i=2; i<argc; i++) {
+        if (!strcmp(argv[i], "--show-runtime-asm")) {
+            show_runtime_asm = TRUE;
+            continue;
+        }
+        if (!strcmp(argv[i], "--show-clocks")) {
+            show_clocks = TRUE;
+            continue;
+        }
         if (!strcmp(argv[i], "--mem-dump")) {
             if (argc > i+1 && argv[i+1][0] != '-' && argv[i+1][1] != '-') {
                 mem_dump_filepath = argv[i+1];
                 i++;
             }
             should_dump_mem = 1;
+            continue;
         }
     }
 
@@ -63,7 +75,12 @@ i32 main(u32 argc, char *argv[]) {
             break;
         }
 
-        printf("%s\n", line);
+        if (show_runtime_asm) {
+            printf("%s", line);
+        }
+        if (show_runtime_asm || show_clocks) {
+            printf("\n");
+        }
 
         u32 exec_err = processor_exec(&cpu, instruction);
         if (exec_err) {
