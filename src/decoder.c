@@ -931,6 +931,66 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
     }
 
 #ifdef DEBUG
+    printf("TEST_OP(INSTR_HI, IPUSH_REGMEM):    %d\n",
+            TEST_OP(INSTR_HI, IPUSH_REGMEM));
+    printf("TEST_OP(INSTR_HI, IPUSH):    %d\n",
+            TEST_OP(INSTR_HI, IPUSH));
+#endif
+
+    if (   (decoded->op_code=OP_PUSH_REGMEM, TEST_OP(INSTR_HI, IPUSH_REGMEM)
+                && bits_432 == 0b110)
+    ) {
+        new_cursor = decode_params(context, decoded, OPV_BASE, cursor, params);
+        if (out != NULL)
+            sprintf(out, "push %s", params);
+
+        context->pc++;
+
+        return new_cursor;
+    }
+
+#ifdef DEBUG
+    printf("TEST_OP(INSTR_HI, IPOP_REGMEM):    %d\n",
+            TEST_OP(INSTR_HI, IPOP_REGMEM));
+    printf("TEST_OP(INSTR_HI, IPOP):    %d\n",
+            TEST_OP(INSTR_HI, IPOP));
+#endif
+
+    if (   (decoded->op_code=OP_POP_REGMEM, TEST_OP(INSTR_HI, IPOP_REGMEM)
+                && bits_432 == 0b000)
+    ) {
+        new_cursor = decode_params(context, decoded, OPV_BASE, cursor, params);
+        if (out != NULL)
+            sprintf(out, "pop %s", params);
+
+        context->pc++;
+
+        return new_cursor;
+    }
+
+    if (  
+        (decoded->op_code=OP_POP, TEST_OP(INSTR_HI, IPOP))
+        || (decoded->op_code=OP_PUSH, TEST_OP(INSTR_HI, IPUSH))
+    ) {
+        const u8 REG = INSTR_HI & 0b00000111;
+        char reg[32];
+        regcode_to_str(REG, 1, reg);
+        decoded->is_wide = TRUE;
+        decoded->operands[0].type = OperandRegister;
+        decoded->operands[0].reg.index = REG;
+
+        if (out != NULL) {
+            sprintf(out, "%s %s",
+                (decoded->op_code == OP_POP ? "pop" : "push"),
+                reg
+            );
+        }
+
+        context->pc++;
+        return new_cursor - 1; // Occupies only one byte
+    }
+
+#ifdef DEBUG
     printf("TEST_OP(INSTR_HI, IADD_IMM2ACC):    %d\n",
             TEST_OP(INSTR_HI, IADD_IMM2ACC));
     printf("TEST_OP(INSTR_HI, IADD_IMM2REGMEM): %d\n",

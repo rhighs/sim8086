@@ -21,8 +21,8 @@
 
 #define IJMP_DIRECT_SEG          0b11101001
 #define IJMP_DIRECT_SEG_SHORT    0b11101011
-#define IJMP_INDIRECT_SEG        0b11111111 // Must check bits 2-3-4 from 2nd byte
 #define IJMP_DIRECT_INTER_SEG    0b11101010 
+#define IJMP_INDIRECT_SEG        0b11111111 // Must check bits 2-3-4 from 2nd byte
 #define IJMP_INDIRECT_INTER_SEG  0b11111111 // Must check bits 2-3-4 from 2nd byte
 
 #define IJE   0b01110100
@@ -92,6 +92,12 @@
 #define IIMUL 0b11110110
 #define IDIV  0b11110110
 #define IIDIV 0b11110110
+
+#define IPOP            0b01011000
+#define IPOP_REGMEM     0b10001111
+
+#define IPUSH_REGMEM    0b11111111
+#define IPUSH           0b01011000
 
 typedef enum {
     OP_MOV,
@@ -171,6 +177,10 @@ typedef enum {
     OP_IMUL,
     OP_DIV,
     OP_IDIV,
+    OP_POP,
+    OP_POP_REGMEM,
+    OP_PUSH,
+    OP_PUSH_REGMEM,
     OPS_COUNT,
 } op_code_t;
 
