@@ -775,6 +775,192 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
                 __CPU_JUMP(destination_operand.imm.value, instr_width);
             break;
 
+        case OP_MUL:
+            assert(destination_operand.type == OperandRegister);
+            if (source_operand.type == OperandImmediate) {
+                u16 value = cpu->registers[reg_dst]
+                    * source_immediate;
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandRegister) {
+                u16 value = cpu->registers[reg_dst]
+                    * cpu->registers[reg_src];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandMemory) {
+                u32 offset = source_offset;
+                u16 value = cpu->registers[reg_dst]
+                    * cpu->memory[offset];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandMemoryOffset) {
+                u32 offset = MEM_REGS_OFFSET;
+                u16 value = cpu->registers[reg_dst]
+                    * cpu->memory[offset];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandMemoryOffset8) {
+                u32 offset = MEM_REGS_OFFSET8;
+                u16 value = cpu->registers[reg_dst]
+                    * cpu->memory[offset];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandMemoryOffset16) {
+                u32 offset = MEM_REGS_OFFSET16;
+                u16 value = cpu->registers[reg_dst]
+                    * cpu->memory[offset];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            }
+            break;
+
+        case OP_IMUL:
+            assert(destination_operand.type == OperandRegister);
+            if (source_operand.type == OperandImmediate) {
+                i16 value = (i16)cpu->registers[reg_dst]
+                    * (i16)source_immediate;
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandRegister) {
+                i16 value = (i16)cpu->registers[reg_dst]
+                    * (i16)cpu->registers[reg_src];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandMemory) {
+                u32 offset = source_offset;
+                i16 value = (i16)cpu->registers[reg_dst]
+                    * (i8)cpu->memory[offset];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandMemoryOffset) {
+                u32 offset = MEM_REGS_OFFSET;
+                i16 value = (i16)cpu->registers[reg_dst]
+                    * (i8)cpu->memory[offset];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandMemoryOffset8) {
+                u32 offset = MEM_REGS_OFFSET8;
+                i16 value = (i16)cpu->registers[reg_dst]
+                    * (i8)cpu->memory[offset];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandMemoryOffset16) {
+                u32 offset = MEM_REGS_OFFSET16;
+                i16 value = (i16)cpu->registers[reg_dst]
+                    * (i8)cpu->memory[offset];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            }
+            break;
+
+        case OP_DIV:
+            assert(destination_operand.type == OperandRegister);
+            if (source_operand.type == OperandImmediate) {
+                u16 value = cpu->registers[reg_dst]
+                    / source_immediate;
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandRegister) {
+                u16 value = cpu->registers[reg_dst]
+                    / cpu->registers[reg_src];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandMemory) {
+                u32 offset = source_offset;
+                u16 value = cpu->registers[reg_dst]
+                    / cpu->memory[offset];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandMemoryOffset) {
+                u32 offset = MEM_REGS_OFFSET;
+                u16 value = cpu->registers[reg_dst] 
+                    / cpu->memory[offset];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandMemoryOffset8) {
+                u32 offset = MEM_REGS_OFFSET8;
+                u16 value = cpu->registers[reg_dst]
+                    / cpu->memory[offset];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandMemoryOffset16) {
+                u32 offset = MEM_REGS_OFFSET16;
+                u16 value = cpu->registers[reg_dst]
+                    / cpu->memory[offset];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            }
+            break;
+
+        case OP_IDIV:
+            assert(destination_operand.type == OperandRegister);
+            if (source_operand.type == OperandImmediate) {
+                i16 value = (i16)cpu->registers[reg_dst]
+                    / (i16)source_immediate;
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandRegister) {
+                i16 value = (i16)cpu->registers[reg_dst]
+                    / (i16)cpu->registers[reg_src];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandMemory) {
+                u32 offset = source_offset;
+                i16 value = (i16)cpu->registers[reg_dst]
+                    / (i8)cpu->memory[offset];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandMemoryOffset) {
+                u32 offset = MEM_REGS_OFFSET;
+                i16 value = (i16)cpu->registers[reg_dst]
+                    / (i8)cpu->memory[offset];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandMemoryOffset8) {
+                u32 offset = MEM_REGS_OFFSET8;
+                i16 value = (i16)cpu->registers[reg_dst]
+                    / (i8)cpu->memory[offset];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            } else if (source_operand.type == OperandMemoryOffset16) {
+                u32 offset = MEM_REGS_OFFSET16;
+                i16 value = (i16)cpu->registers[reg_dst]
+                    / (i8)cpu->memory[offset];
+                processor_set_flags(cpu, value);
+                processor_write_imm_2_reg(cpu, reg_dst,
+                    value, instruction.is_wide);
+            }
+            break;
+
+        case OP_POP:
+        case OP_POP_REGMEM:
+        case OP_PUSH:
+        case OP_PUSH_REGMEM:
+        case OP_ROR:
+        case OP_ROL:
         default:
             goto unimplemented;
     }
