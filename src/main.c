@@ -66,6 +66,7 @@ i32 main(u32 argc, char *argv[]) {
     if (!processor_init(&cpu, program, bytes_read))
         goto processor_error;
 
+    u32 clocks_taken = 0;
     while (1) {
         u32 old_ip = cpu.ip;
         instruction_t instruction = { 0 };
@@ -77,6 +78,11 @@ i32 main(u32 argc, char *argv[]) {
 
         if (show_runtime_asm) {
             printf("%s", line);
+        }
+        if (show_clocks) {
+            const u32 clocks = processor_clocks_for(instruction);
+            clocks_taken += clocks;
+            printf(" ; clocks: +%d | total: %d", clocks, clocks_taken);
         }
         if (show_runtime_asm || show_clocks) {
             printf("\n");
@@ -90,7 +96,9 @@ i32 main(u32 argc, char *argv[]) {
     }
 
     processor_state_dump(&cpu, stdout);
-
+    if (show_clocks) {
+        printf("Total clocks taken (estimate): %d\n", clocks_taken);
+    }
     if (should_dump_mem) {
         printf("Dumping mem to %s\n",
                 strlen(mem_dump_filepath) != 0 ? mem_dump_filepath : "stdout");

@@ -195,7 +195,9 @@ u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code,
     if (op_code == OP_MOV) {
         assert(source_operand.type == OperandRegister
                 || source_operand.type == OperandMemory
-                || source_operand.type == OperandMemoryOffset);
+                || source_operand.type == OperandMemoryOffset
+                || source_operand.type == OperandMemoryOffset8
+                || source_operand.type == OperandMemoryOffset16);
 
         if (source_operand.type == OperandRegister) {
             if (destination_operand.type == OperandRegister) {
@@ -217,6 +219,14 @@ u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code,
         } else if (source_operand.type == OperandMemoryOffset) {
             assert(destination_operand.type == OperandRegister);
             u32 offset = MEM_REGS_OFFSET;
+            processor_write_mem_2_reg(cpu, offset, reg_dst, is_wide);
+        } else if (source_operand.type == OperandMemoryOffset8) {
+            assert(destination_operand.type == OperandRegister);
+            u32 offset = MEM_REGS_OFFSET8;
+            processor_write_mem_2_reg(cpu, offset, reg_dst, is_wide);
+        } else if (source_operand.type == OperandMemoryOffset16) {
+            assert(destination_operand.type == OperandRegister);
+            u32 offset = MEM_REGS_OFFSET16;
             processor_write_mem_2_reg(cpu, offset, reg_dst, is_wide);
         }
     } else if (op_code == OP_MOV_IMM2REG) {
@@ -260,10 +270,6 @@ u8 processor_exec_mov(processor_t *cpu, const op_code_t op_code,
 #undef MEM_REGS_OFFSET16
 
     return TRUE;
-}
-
-u32 processor_clocks_for(const instruction_t instruction) {
-    return NONE;
 }
 
 u32 processor_init(processor_t *cpu, const u8 *program, const u32 size) {
@@ -372,7 +378,8 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
             if (source_operand.type == OperandRegister) {
                 assert(destination_operand.type == OperandRegister
                     || destination_operand.type == OperandMemoryOffset
-                    || destination_operand.type == OperandMemoryOffset8);
+                    || destination_operand.type == OperandMemoryOffset8
+                    || destination_operand.type == OperandMemoryOffset16);
 
                 if (destination_operand.type == OperandRegister) {
                     u8 reg_dst = destination_operand.reg.index;
@@ -433,6 +440,34 @@ u32 processor_exec(processor_t *cpu, const instruction_t instruction) {
                     }
                 } else if (destination_operand.type == OperandMemoryOffset8) {
                     u32 offset = MEM_REGS_OFFSET8;
+
+                    u32 sum = 0;
+                    if (instruction.is_wide) {
+                        const u16 value = cpu->registers[reg_src];
+                        const i16 value_sgn = source_operand.imm.value;
+                        sum = value_sgn < 0
+                            ? (u32)(cpu->memory[offset])
+                                    - (u32)(abs(value_sgn))
+                            : (u32)(cpu->memory[offset])
+                                    + (u32)(value);
+                    } else {
+                        const u8 value = source_operand.imm.value;
+                        const i8 value_sgn = source_operand.imm.value;
+                        sum = value_sgn < 0
+                            ? (u32)(cpu->memory[offset])
+                                    - (u32)(abs((i8)(value_sgn)))
+                            : (u32)(cpu->memory[offset])
+                                    + (u32)(value);
+                    }
+
+                    cpu->registers[reg_dst] = (u16)sum;
+                    processor_set_flags(cpu, (u16)sum);
+                    if (sum & 0xFF00) { 
+                        cpu->flags |= FLAG_CARRY;
+                        cpu->flags |= FLAG_OVERFLOW;
+                    }
+                } else if (destination_operand.type == OperandMemoryOffset16) {
+                    u32 offset = MEM_REGS_OFFSET16;
 
                     u32 sum = 0;
                     if (instruction.is_wide) {
@@ -1014,4 +1049,306 @@ void processor_mem_dump(processor_t *cpu, FILE *dump_file) {
         fprintf(stderr,
                 "processor_mem_dump wrote less than expected, ignoring...\n");
     }
+}
+
+static
+u32 ea_clocks(const operand_t operand) {
+    operand_register_type_t op_type = operand.type;
+    u8 reg_1 = operand.offset.regs[0];
+    u8 reg_2 = operand.offset.regs[0];
+
+    assert(op_type == OperandMemory
+            || op_type == OperandMemoryOffset
+            || op_type == OperandMemoryOffset8
+            || op_type == OperandMemoryOffset16);
+
+    switch (op_type) {
+    case OperandMemory:
+        return 6;
+    case OperandMemoryOffset:
+    case OperandMemoryOffset8:
+    case OperandMemoryOffset16:
+        if (operand.offset.n_regs == 1) {
+            return operand.offset.offset == 0 ? 5 : 9;
+        } else if (operand.offset.offset == 0) {
+            if (
+               (reg_1 == REG_BP && reg_2 == REG_DI)
+               || (reg_1 == REG_BX && reg_2 == REG_SI)
+               )
+                return 7;
+            else
+                return 9;
+        } else {
+            if (
+               (reg_1 == REG_BP && reg_2 == REG_DI)
+               || (reg_1 == REG_BX && reg_2 == REG_SI)
+               )
+                return 11;
+            else
+                return 12;
+        }
+    default: 
+        assert(FALSE && "unreachable");
+    }
+
+    return NONE;
+}
+
+u32 processor_clocks_for(const instruction_t instruction) {
+    operand_register_type_t dst_type = instruction.operands[0].type;
+    operand_register_type_t src_type = instruction.operands[1].type;
+
+    u8 dst_is_mem = dst_type == OperandMemory
+                          || dst_type == OperandMemoryOffset
+                          || dst_type == OperandMemoryOffset8
+                          || dst_type == OperandMemoryOffset16;
+    u8 src_is_mem = src_type == OperandMemory
+                          || src_type == OperandMemoryOffset
+                          || src_type == OperandMemoryOffset8
+                          || src_type == OperandMemoryOffset16;
+    u8 dst_is_reg = dst_type == OperandRegister;
+    u8 src_is_reg = src_type == OperandRegister;
+    u8 src_is_imm = src_type == OperandImmediate;
+    u8 src_imm = instruction.operands[1].imm.value;
+
+    u32 clocks = 0;
+
+    switch (instruction.op_code) {
+    case OP_MOV:
+        if (dst_is_mem) {
+            clocks += 8;
+        } else if (src_is_mem) {
+            clocks += 9;
+        } else if (src_is_reg && dst_is_reg) {
+            clocks += 2;
+        }
+        break;
+    case OP_MOV_IMM2REG: clocks += 4; break;
+    case OP_MOV_IMM2REGMEM: if (dst_is_mem) {
+                                clocks += 10;
+                            } else {
+                                clocks += 4;
+                            }
+                            break;
+    case OP_MOV_MEM2ACC: clocks += 10; break;
+    case OP_MOV_ACC2MEM: clocks += 10; break;
+
+    case OP_CMP_REGMEM_REG: 
+        if (dst_is_mem) {
+            clocks += 9;
+        } else if (src_is_mem) {
+            clocks += 9;
+        } else if (src_is_reg && dst_is_reg) {
+            clocks += 3;
+        }
+        break;
+    case OP_CMP_IMM_WITH_ACC:
+        clocks += 4; break;
+    case OP_CMP_IMM_WITH_REGMEM:
+        if (dst_is_mem) {
+            clocks += 10;
+        } else {
+            clocks += 4;
+        }
+        break;
+
+    case OP_SUB: 
+    case OP_ADD: 
+    case OP_AND_REGMEM2REG:
+    case OP_XOR_REGMEM2REG:
+    case OP_OR_REGMEM2REG:
+        if (dst_is_mem) {
+            clocks += 16;
+        } else if (src_is_mem) {
+            clocks += 9;
+        } else if (src_is_reg && dst_is_reg) {
+            clocks += 3;
+        }
+        break;
+    case OP_SUB_IMM_FROM_REGMEM:
+    case OP_ADD_IMM2REGMEM:
+    case OP_AND_IMM2REGMEM:
+    case OP_XOR_IMM2REGMEM:
+    case OP_OR_IMM2REGMEM:
+        if (dst_is_mem) {
+            clocks += 17;
+        } else {
+            clocks += 4;
+        }
+        break;
+    case OP_SUB_IMM_FROM_ACC:
+    case OP_XOR_IMM2ACC:
+    case OP_OR_IMM2ACC:
+    case OP_AND_IMM2ACC:
+    case OP_ADD_IMM2ACC:
+    case OP_TEST_IMM2ACC:
+        clocks += 4;
+        break;
+
+    case OP_TEST_REGMEM2REG:
+        if (src_is_mem) {
+            clocks += 9;
+        } else if (src_is_reg && dst_is_reg) {
+            clocks += 3;
+        }
+        break;
+    case OP_TEST_IMM2REGMEM:
+        if (dst_is_mem) {
+            clocks += 11;
+        } else {
+            clocks += 5;
+        }
+        break;
+
+    case OP_MUL:
+        if (src_is_mem && instruction.is_wide) {
+            clocks += 130;
+        } else if (src_is_mem) {
+            clocks += 80;
+        } else if (src_is_reg && instruction.is_wide) {
+            clocks += 120;
+        } else if (src_is_reg) {
+            clocks += 74;
+        }
+        break;
+    case OP_IMUL:
+        if (src_is_mem && instruction.is_wide) {
+            clocks += 145;
+        } else if (src_is_mem) {
+            clocks += 98;
+        } else if (src_is_reg && instruction.is_wide) {
+            clocks += 135;
+        } else if (src_is_reg) {
+            clocks += 89;
+        }
+        break;
+
+    case OP_DIV:
+        if (src_is_mem && instruction.is_wide) {
+            clocks += 159;
+        } else if (src_is_mem) {
+            clocks += 91;
+        } else if (src_is_reg && instruction.is_wide) {
+            clocks += 153;
+        } else if (src_is_reg) {
+            clocks += 85;
+        }
+        break;
+    case OP_IDIV:
+        if (src_is_mem && instruction.is_wide) {
+            clocks += 180;
+        } else if (src_is_mem) {
+            clocks += 112;
+        } else if (src_is_reg && instruction.is_wide) {
+            clocks += 172;
+        } else if (src_is_reg) {
+            clocks += 107;
+        }
+        break;
+
+    case OP_POP:
+        clocks += 11;
+        break;
+    case OP_POP_REGMEM:
+        if (dst_is_mem) {
+            clocks += 17;
+        } else {
+            clocks += 8;
+        }
+        break;
+
+    case OP_PUSH:
+        clocks += 11;
+        break;
+    case OP_PUSH_REGMEM:
+        if (dst_is_mem) {
+            clocks += 16;
+        } else {
+            clocks += 11;
+        }
+        break;
+
+    case OP_NOT:
+        if (dst_is_mem) {
+            clocks += 16;
+        } else {
+            clocks += 3;
+        }
+        break;
+
+    case OP_ROL:
+    case OP_ROR:
+    case OP_SHR:
+    case OP_SAR:
+    case OP_SHL:
+    case OP_SAL:
+        if (dst_is_mem && src_is_imm && src_imm == 1) {
+            clocks += 15;
+        } else if (dst_is_reg && src_is_imm && src_imm == 1) {
+            clocks += 2;
+        } else if (dst_is_mem) {
+            clocks += 24;
+        } else if (dst_is_reg) {
+            clocks += 12;
+        }
+        break;
+
+    case OP_JMP_DIRECT_SEG:
+    case OP_JMP_DIRECT_SEG_SHORT:
+    case OP_JMP_INDIRECT_SEG:
+    case OP_JMP_DIRECT_INTER_SEG:
+    case OP_JMP_INDIRECT_INTER_SEG:
+    case OP_JE:
+    case OP_JZ:
+    case OP_JL:
+    case OP_JNGE:
+    case OP_JLE:
+    case OP_JNG:
+    case OP_JB:
+    case OP_JNAE:
+    case OP_JBE:
+    case OP_JNA:
+    case OP_JP:
+    case OP_JPE:
+    case OP_JO:
+    case OP_JS:
+    case OP_JNE:
+    case OP_JNZ:
+    case OP_JNL:
+    case OP_JGE:
+    case OP_JNLE:
+    case OP_JG:
+    case OP_JNB:
+    case OP_JAE:
+    case OP_JNBE:
+    case OP_JA:
+    case OP_JNP:
+    case OP_JPO:
+    case OP_JNO:
+    case OP_JNS:
+    case OP_JCXZ:
+        clocks += 4; // TODO: +16 in some case
+        break;
+    case OP_LOOP:
+        clocks += 5; // TODO: +17 in some case
+        break;
+    case OP_LOOPE:
+    case OP_LOOPZ:
+        clocks += 6; // TODO: +18 in some case
+        break;
+    case OP_LOOPNE:
+    case OP_LOOPNZ:
+        clocks += 5; // TODO: +19 in some case
+        break;
+    default:
+        break;
+    }
+
+    if (dst_is_mem) {
+        clocks += ea_clocks(instruction.operands[0]);
+    } else if (src_is_mem) {
+        clocks += ea_clocks(instruction.operands[1]);
+    }
+
+    return clocks;
 }
