@@ -39,7 +39,7 @@
 
 #define __D_NO_LABELS 64
 
-#define TEST_OP(OPCODE, AGAINST) ((OPCODE>>(8-opcode_len(AGAINST)))==(AGAINST>>(8-opcode_len(AGAINST))))
+#define TEST_OP(OPCODE, AGAINST, OPDEF) ((OPCODE>>(8-opcode_len(OPDEF)))==(AGAINST>>(8-opcode_len(OPDEF))))
 
 /**
  * Defines common parameters placements in opcodes such as mov, sub, add

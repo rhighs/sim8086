@@ -14,46 +14,94 @@ u8 opcode_len(u8 opcode) {
     u8 len = 8;
 
     switch (opcode) {
+    case OP_MOV_IMM2REG:      len=4; break;
 
-    case IMOV_IMM2REG:      len=4; break;
+    case OP_POP:
+    case OP_PUSH:             len=5; break;
 
-    case SAME_OPCODE_OPS:   
-    case IMOV:              
-    case IADD:              
-    case IADD_IMM2ACC:      
-    case ISUB:              
-    case ICMP_REGMEM_REG:   len=6; break;
+    case OP_SAL:
+    case OP_SHL:
+    case OP_SAR:
+    case OP_SHR:
+    case OP_ROL:
+    case OP_ROR:
+    case OP_MOV:              
+    case OP_ADD:              
+    case OP_ADD_IMM2REGMEM:      
+    case OP_TEST_IMM2REGMEM:
+    case OP_TEST_IMM2ACC:
+    case OP_TEST_REGMEM2REG:
+    case OP_OR_REGMEM2REG:
+    case OP_AND_REGMEM2REG:
+    case OP_XOR_REGMEM2REG:
+    case OP_SUB:              
+    case OP_SUB_IMM_FROM_REGMEM:
+    case OP_CMP_IMM_WITH_REGMEM:
+    case OP_CMP_REGMEM_REG:   len=6; break;
 
-    case ICMP_IMM_WITH_ACC:
-    case IMOV_IMM2REGMEM:
-    case IMOV_MEM2ACC:
-    case IMOV_ACC2MEM:
-    case ISUB_IMM_FROM_ACC: len=7; break;
+    case OP_MUL:
+    case OP_IMUL:
+    case OP_DIV:
+    case OP_IDIV:
+    case OP_AND_IMM2REGMEM:
+    case OP_AND_IMM2ACC:
+    case OP_NOT:
+    case OP_CMP_IMM_WITH_ACC:
+    case OP_MOV_IMM2REGMEM:
+    case OP_MOV_MEM2ACC:
+    case OP_MOV_ACC2MEM:
+    case OP_OR_IMM2REGMEM:
+    case OP_OR_IMM2ACC:
+    case OP_XOR_IMM2REGMEM:
+    case OP_XOR_IMM2ACC:
+    case OP_ADD_IMM2ACC:      
+    case OP_SUB_IMM_FROM_ACC: len=7; break;
 
-    case IJMP_DIRECT_SEG:
-    case IJMP_DIRECT_SEG_SHORT:
-    case IJMP_INDIRECT_SEG:
-    case IJMP_DIRECT_INTER_SEG: 
-    case IJE:
-    case IJL:
-    case IJLE:
-    case IJB:
-    case IJNA:
-    case IJP:
-    case IJO:
-    case IJS:
-    case IJNE:
-    case IJNL:
-    case IJG:
-    case IJNB:
-    case IJA:
-    case IJNP:
-    case IJNO:
-    case IJNS:
-    case IJCXZ:
-    case ILOOP:
-    case ILOOPZ:
-    case ILOOPNZ:           len = 8; break;
+    case OP_POP_REGMEM:
+    case OP_PUSH_REGMEM:
+    case OP_JMP_DIRECT_SEG:
+    case OP_JMP_DIRECT_SEG_SHORT:
+    case OP_JMP_INDIRECT_SEG:
+    case OP_JMP_DIRECT_INTER_SEG: 
+    case OP_JE:
+    case OP_JZ:
+    case OP_JL:
+    case OP_JNGE:
+    case OP_JLE:
+    case OP_JNG:
+    case OP_JB:
+    case OP_JNAE:
+    case OP_JBE:
+    case OP_JNA:
+    case OP_JP:
+    case OP_JPE:
+    case OP_JO:
+    case OP_JS:
+    case OP_JNE:
+    case OP_JNZ:
+    case OP_JNL:
+    case OP_JGE:
+    case OP_JNLE:
+    case OP_JG:
+    case OP_JNB:
+    case OP_JAE:
+    case OP_JNBE:
+    case OP_JA:
+    case OP_JNP:
+    case OP_JPO:
+    case OP_JNO:
+    case OP_JNS:
+    case OP_JCXZ:
+    case OP_LOOP:
+    case OP_LOOPZ:
+    case OP_LOOPE:
+    case OP_LOOPNZ:
+    case OP_LOOPNE:     len=8; break;
+ 
+
+    default:
+        fprintf(stderr, "Bad opcode %d\n", opcode);
+        assert(FALSE && "unimplemented");
     }
 
     return len;
@@ -506,7 +554,7 @@ u32 decode_params(decoder_context_t *context, instruction_t *decoded,
         operand_t *source_operand = &(decoded->operands[1]);
 
         // Handle this edge case by skipping to the end
-        u8 cmp_decoding = TEST_OP(INSTR_HI, ICMP_IMM_WITH_ACC);
+        u8 cmp_decoding = TEST_OP(INSTR_HI, ICMP_IMM_WITH_ACC, OP_CMP_IMM_WITH_ACC);
         if (cmp_decoding) 
             goto decode_cmp;
 
@@ -894,28 +942,28 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 #ifdef DEBUG
     printf("INSTR_HI: "); __print_bits(INSTR_HI);
     printf("TEST_OP(INSTR_HI, IMOV_IMM2REG):  %d\n",
-            TEST_OP(INSTR_HI, IMOV_IMM2REG));
+            TEST_OP(INSTR_HI, IMOV_IMM2REG, OP_MOV_IMM2REG));
     printf("TEST_OP(INSTR_HI, IMOV_ACC2MEM):  %d\n",
-            TEST_OP(INSTR_HI, IMOV_ACC2MEM));
+            TEST_OP(INSTR_HI, IMOV_ACC2MEM, OP_MOV_ACC2MEM));
     printf("TEST_OP(INSTR_HI, IMOV_MEM2ACC):  %d\n",
-            TEST_OP(INSTR_HI, IMOV_MEM2ACC));
+            TEST_OP(INSTR_HI, IMOV_MEM2ACC, OP_MOV_MEM2ACC));
     printf("TEST_OP(INSTR_HI, IMOV_IMM2REGM): %d\n",
-            TEST_OP(INSTR_HI, IMOV_IMM2REGMEM));
-    printf("TEST_OP(INSTR_HI, IMOV):          %d\n", TEST_OP(INSTR_HI, IMOV));
+            TEST_OP(INSTR_HI, IMOV_IMM2REGMEM, OP_MOV_IMM2REGMEM));
+    printf("TEST_OP(INSTR_HI, IMOV):          %d\n", TEST_OP(INSTR_HI, IMOV, OP_MOV));
 #endif
 
     char params[32] = {0};
     op_variants_t matched_variant;
     if (   (decoded->op_code=OP_MOV_IMM2REG,
-                matched_variant=OPV_IMM2REG, TEST_OP(INSTR_HI, IMOV_IMM2REG))   
+                matched_variant=OPV_IMM2REG, TEST_OP(INSTR_HI, IMOV_IMM2REG, OP_MOV_IMM2REG))   
         || (decoded->op_code=OP_MOV_ACC2MEM, 
-                matched_variant=OPV_ACC2MEM, TEST_OP(INSTR_HI, IMOV_ACC2MEM))  
+                matched_variant=OPV_ACC2MEM, TEST_OP(INSTR_HI, IMOV_ACC2MEM, OP_MOV_ACC2MEM))  
         || (decoded->op_code=OP_MOV_MEM2ACC, 
-                matched_variant=OPV_MEM2ACC, TEST_OP(INSTR_HI, IMOV_MEM2ACC))  
+                matched_variant=OPV_MEM2ACC, TEST_OP(INSTR_HI, IMOV_MEM2ACC, OP_MOV_MEM2ACC))  
         || (decoded->op_code=OP_MOV_IMM2REGMEM,
-                matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_HI, IMOV_IMM2REGMEM))
+                matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_HI, IMOV_IMM2REGMEM, OP_MOV_IMM2REGMEM))
         || (decoded->op_code=OP_MOV, 
-                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IMOV))           
+                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IMOV, OP_MOV))           
         ) {
 #ifdef DEBUG
         printf("[MOV] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
@@ -932,12 +980,12 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 
 #ifdef DEBUG
     printf("TEST_OP(INSTR_HI, IPUSH_REGMEM):    %d\n",
-            TEST_OP(INSTR_HI, IPUSH_REGMEM));
+            TEST_OP(INSTR_HI, IPUSH_REGMEM, OP_PUSH_REGMEM));
     printf("TEST_OP(INSTR_HI, IPUSH):    %d\n",
-            TEST_OP(INSTR_HI, IPUSH));
+            TEST_OP(INSTR_HI, IPUSH, OP_PUSH));
 #endif
 
-    if (   (decoded->op_code=OP_PUSH_REGMEM, TEST_OP(INSTR_HI, IPUSH_REGMEM)
+    if (   (decoded->op_code=OP_PUSH_REGMEM, TEST_OP(INSTR_HI, IPUSH_REGMEM, OP_PUSH_REGMEM)
                 && bits_432 == 0b110)
     ) {
         new_cursor = decode_params(context, decoded, OPV_BASE, cursor, params);
@@ -951,12 +999,12 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 
 #ifdef DEBUG
     printf("TEST_OP(INSTR_HI, IPOP_REGMEM):    %d\n",
-            TEST_OP(INSTR_HI, IPOP_REGMEM));
+            TEST_OP(INSTR_HI, IPOP_REGMEM, OP_POP_REGMEM));
     printf("TEST_OP(INSTR_HI, IPOP):    %d\n",
-            TEST_OP(INSTR_HI, IPOP));
+            TEST_OP(INSTR_HI, IPOP, OP_POP));
 #endif
 
-    if (   (decoded->op_code=OP_POP_REGMEM, TEST_OP(INSTR_HI, IPOP_REGMEM)
+    if (   (decoded->op_code=OP_POP_REGMEM, TEST_OP(INSTR_HI, IPOP_REGMEM, OP_POP_REGMEM)
                 && bits_432 == 0b000)
     ) {
         new_cursor = decode_params(context, decoded, OPV_BASE, cursor, params);
@@ -969,8 +1017,8 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
     }
 
     if (  
-        (decoded->op_code=OP_POP, TEST_OP(INSTR_HI, IPOP))
-        || (decoded->op_code=OP_PUSH, TEST_OP(INSTR_HI, IPUSH))
+        (decoded->op_code=OP_POP, TEST_OP(INSTR_HI, IPOP, OP_POP))
+        || (decoded->op_code=OP_PUSH, TEST_OP(INSTR_HI, IPUSH, OP_PUSH))
     ) {
         const u8 REG = INSTR_HI & 0b00000111;
         char reg[32];
@@ -992,17 +1040,17 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 
 #ifdef DEBUG
     printf("TEST_OP(INSTR_HI, IADD_IMM2ACC):    %d\n",
-            TEST_OP(INSTR_HI, IADD_IMM2ACC));
+            TEST_OP(INSTR_HI, IADD_IMM2ACC, OP_ADD_IMM2ACC));
     printf("TEST_OP(INSTR_HI, IADD_IMM2REGMEM): %d\n",
-            TEST_OP(INSTR_HI, IADD_IMM2REGMEM));
+            TEST_OP(INSTR_HI, IADD_IMM2REGMEM, OP_ADD_IMM2REGMEM));
     printf("TEST_OP(INSTR_HI, IADD):            %d\n",
-            TEST_OP(INSTR_HI, IADD));
+            TEST_OP(INSTR_HI, IADD, OP_ADD));
 #endif
 
     if (   (decoded->op_code=OP_ADD_IMM2ACC,
-                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, IADD_IMM2ACC))
+                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, IADD_IMM2ACC, OP_ADD_IMM2ACC))
         || (decoded->op_code=OP_ADD,
-                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IADD))
+                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IADD, OP_ADD))
         ) {
 #ifdef DEBUG
         printf("[ADD] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
@@ -1017,15 +1065,15 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
     }
 
 #ifdef DEBUG
-    printf("TEST_OP(INSTR_HI, ISUB_IMM_FROM_ACC):     %d\n", TEST_OP(INSTR_HI, ISUB_IMM_FROM_ACC));
-    printf("TEST_OP(INSTR_HI, ISUB_IMM_FROM_REGMEM):  %d\n", TEST_OP(INSTR_HI, ISUB_IMM_FROM_REGMEM));
-    printf("TEST_OP(INSTR_HI, ISUB):                  %d\n", TEST_OP(INSTR_HI, ISUB));
+    printf("TEST_OP(INSTR_HI, ISUB_IMM_FROM_ACC):     %d\n", TEST_OP(INSTR_HI, ISUB_IMM_FROM_ACC, OP_SUB_IMM_FROM_ACC));
+    printf("TEST_OP(INSTR_HI, ISUB_IMM_FROM_REGMEM):  %d\n", TEST_OP(INSTR_HI, ISUB_IMM_FROM_REGMEM, OP_SUB_IMM_FROM_REGMEM));
+    printf("TEST_OP(INSTR_HI, ISUB):                  %d\n", TEST_OP(INSTR_HI, ISUB, OP_SUB));
 #endif
 
     if (   (decoded->op_code=OP_SUB_IMM_FROM_ACC,
-                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, ISUB_IMM_FROM_ACC))
+                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, ISUB_IMM_FROM_ACC, OP_SUB_IMM_FROM_ACC))
         || (decoded->op_code=OP_SUB,
-                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, ISUB))
+                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, ISUB, OP_SUB))
         ) {
 #ifdef DEBUG
         printf("[SUB] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
@@ -1040,15 +1088,15 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
     }
 
 #ifdef DEBUG
-    printf("TEST_OP(INSTR_HI, ICMP_IMM_WITH_ACC):     %d\n", TEST_OP(INSTR_HI, ICMP_IMM_WITH_ACC));
-    printf("TEST_OP(INSTR_HI, ICMP_REGMEM_REG):       %d\n", TEST_OP(INSTR_HI, ICMP_REGMEM_REG));
-    printf("TEST_OP(INSTR_HI, ICMP_IMM_WITH_REGMEM):  %d\n", TEST_OP(INSTR_HI, ICMP_IMM_WITH_REGMEM));
+    printf("TEST_OP(INSTR_HI, ICMP_IMM_WITH_ACC):     %d\n", TEST_OP(INSTR_HI, ICMP_IMM_WITH_ACC, OP_CMP_IMM_WITH_ACC));
+    printf("TEST_OP(INSTR_HI, ICMP_REGMEM_REG):       %d\n", TEST_OP(INSTR_HI, ICMP_REGMEM_REG, OP_CMP_REGMEM_REG));
+    printf("TEST_OP(INSTR_HI, ICMP_IMM_WITH_REGMEM):  %d\n", TEST_OP(INSTR_HI, ICMP_IMM_WITH_REGMEM, OP_CMP_IMM_WITH_REGMEM));
 #endif
 
     if (   (decoded->op_code=OP_CMP_IMM_WITH_ACC,
-                matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_HI, ICMP_IMM_WITH_ACC))
+                matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_HI, ICMP_IMM_WITH_ACC, OP_CMP_IMM_WITH_ACC))
         || (decoded->op_code=OP_CMP_REGMEM_REG,
-                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, ICMP_REGMEM_REG))
+                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, ICMP_REGMEM_REG, OP_CMP_REGMEM_REG))
         ) {
 #ifdef DEBUG
         printf("[CMP] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
@@ -1064,30 +1112,30 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
 
     u8 matched_jmp_code;
     if (   (decoded->op_code=OP_JMP_DIRECT_SEG,
-                TEST_OP(INSTR_HI, IJMP_DIRECT_SEG))
+                TEST_OP(INSTR_HI, IJMP_DIRECT_SEG, OP_JMP_DIRECT_SEG))
         || (decoded->op_code=OP_JMP_DIRECT_SEG_SHORT,
-                TEST_OP(INSTR_HI, IJMP_DIRECT_SEG_SHORT))
+                TEST_OP(INSTR_HI, IJMP_DIRECT_SEG_SHORT, OP_JMP_DIRECT_SEG_SHORT))
         || (decoded->op_code=OP_JMP_INDIRECT_SEG,
-                TEST_OP(INSTR_HI, IJMP_INDIRECT_SEG))
+                TEST_OP(INSTR_HI, IJMP_INDIRECT_SEG, OP_JMP_INDIRECT_SEG))
         || (decoded->op_code=OP_JMP_DIRECT_INTER_SEG,
-                TEST_OP(INSTR_HI, IJMP_DIRECT_INTER_SEG))
-        || (decoded->op_code=OP_JE,      TEST_OP(INSTR_HI, IJE))
-        || (decoded->op_code=OP_JL,      TEST_OP(INSTR_HI, IJL))
-        || (decoded->op_code=OP_JLE,     TEST_OP(INSTR_HI, IJLE))
-        || (decoded->op_code=OP_JB,      TEST_OP(INSTR_HI, IJB))
-        || (decoded->op_code=OP_JBE,     TEST_OP(INSTR_HI, IJBE))
-        || (decoded->op_code=OP_JP,      TEST_OP(INSTR_HI, IJP))
-        || (decoded->op_code=OP_JO,      TEST_OP(INSTR_HI, IJO))
-        || (decoded->op_code=OP_JS,      TEST_OP(INSTR_HI, IJS))
-        || (decoded->op_code=OP_JNE,     TEST_OP(INSTR_HI, IJNE))
-        || (decoded->op_code=OP_JNL,     TEST_OP(INSTR_HI, IJNL))
-        || (decoded->op_code=OP_JNLE,    TEST_OP(INSTR_HI, IJNLE))
-        || (decoded->op_code=OP_JNB,     TEST_OP(INSTR_HI, IJNB))
-        || (decoded->op_code=OP_JNBE,    TEST_OP(INSTR_HI, IJNBE))
-        || (decoded->op_code=OP_JNP,     TEST_OP(INSTR_HI, IJNP))
-        || (decoded->op_code=OP_JNO,     TEST_OP(INSTR_HI, IJNO))
-        || (decoded->op_code=OP_JNS,     TEST_OP(INSTR_HI, IJNS))
-        || (decoded->op_code=OP_JCXZ,    TEST_OP(INSTR_HI, IJCXZ))) {
+                TEST_OP(INSTR_HI, IJMP_DIRECT_INTER_SEG, OP_JMP_DIRECT_INTER_SEG))
+        || (decoded->op_code=OP_JE,      TEST_OP(INSTR_HI, IJE, OP_JE))
+        || (decoded->op_code=OP_JL,      TEST_OP(INSTR_HI, IJL, OP_JL))
+        || (decoded->op_code=OP_JLE,     TEST_OP(INSTR_HI, IJLE, OP_JLE))
+        || (decoded->op_code=OP_JB,      TEST_OP(INSTR_HI, IJB, OP_JB))
+        || (decoded->op_code=OP_JBE,     TEST_OP(INSTR_HI, IJBE, OP_JBE))
+        || (decoded->op_code=OP_JP,      TEST_OP(INSTR_HI, IJP, OP_JP))
+        || (decoded->op_code=OP_JO,      TEST_OP(INSTR_HI, IJO, OP_JO))
+        || (decoded->op_code=OP_JS,      TEST_OP(INSTR_HI, IJS, OP_JS))
+        || (decoded->op_code=OP_JNE,     TEST_OP(INSTR_HI, IJNE, OP_JNE))
+        || (decoded->op_code=OP_JNL,     TEST_OP(INSTR_HI, IJNL, OP_JNL))
+        || (decoded->op_code=OP_JNLE,    TEST_OP(INSTR_HI, IJNLE, OP_JNLE))
+        || (decoded->op_code=OP_JNB,     TEST_OP(INSTR_HI, IJNB, OP_JNB))
+        || (decoded->op_code=OP_JNBE,    TEST_OP(INSTR_HI, IJNBE, OP_JNB))
+        || (decoded->op_code=OP_JNP,     TEST_OP(INSTR_HI, IJNP, OP_JNP))
+        || (decoded->op_code=OP_JNO,     TEST_OP(INSTR_HI, IJNO, OP_JNO))
+        || (decoded->op_code=OP_JNS,     TEST_OP(INSTR_HI, IJNS, OP_JNS))
+        || (decoded->op_code=OP_JCXZ,    TEST_OP(INSTR_HI, IJCXZ, OP_JCXZ))) {
         // decode jumps
 #ifdef DEBUG
         printf("[JUMPS] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
@@ -1105,13 +1153,13 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
         return new_cursor;
     }
 
-    if (   TEST_OP(INSTR_HI, ISAL)
-        || TEST_OP(INSTR_HI, ISHL)
-        || TEST_OP(INSTR_HI, ISAR)
-        || TEST_OP(INSTR_HI, ISHR)
-        || TEST_OP(INSTR_HI, ISHR)
-        || TEST_OP(INSTR_HI, IROL)
-        || TEST_OP(INSTR_HI, IROR)
+    if (   TEST_OP(INSTR_HI, ISAL, OP_SAL)
+        || TEST_OP(INSTR_HI, ISHL, OP_SHL)
+        || TEST_OP(INSTR_HI, ISAR, OP_SAR)
+        || TEST_OP(INSTR_HI, ISHR, OP_SHR)
+        || TEST_OP(INSTR_HI, ISHR, OP_SHR)
+        || TEST_OP(INSTR_HI, IROL, OP_ROL)
+        || TEST_OP(INSTR_HI, IROR, OP_ROR)
        ) {
         new_cursor = decode_params(context, decoded, OPV_BASE,
             new_cursor, params);
@@ -1169,9 +1217,9 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
     }
 
     if (   (decoded->op_code=OP_XOR_REGMEM2REG,
-                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, IOR_IMM2ACC))
+                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, IOR_IMM2ACC, OP_OR_IMM2ACC))
         || (decoded->op_code=OP_OR_REGMEM2REG,
-                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IOR_REGMEM2REG))
+                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IOR_REGMEM2REG, OP_OR_REGMEM2REG))
        ) {
 #ifdef DEBUG
         printf("[OR] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
@@ -1186,9 +1234,9 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
     }
 
     if (   (decoded->op_code=OP_OR_IMM2ACC,
-                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, IOR_IMM2ACC))
+                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, IOR_IMM2ACC, OP_OR_IMM2ACC))
         || (decoded->op_code=OP_OR_REGMEM2REG,
-                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IOR_REGMEM2REG))
+                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IOR_REGMEM2REG, OP_OR_REGMEM2REG))
        ) {
 #ifdef DEBUG
         printf("[OR] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
@@ -1202,11 +1250,11 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
         return new_cursor;
     }
 
-    if (   TEST_OP(INSTR_HI, INOT)
-        || TEST_OP(INSTR_HI, IMUL)
-        || TEST_OP(INSTR_HI, IIMUL)
-        || TEST_OP(INSTR_HI, IDIV)
-        || TEST_OP(INSTR_HI, IIDIV)) {
+    if (   TEST_OP(INSTR_HI, INOT, OP_NOT)
+        || TEST_OP(INSTR_HI, IMUL, OP_MUL)
+        || TEST_OP(INSTR_HI, IIMUL, OP_IMUL)
+        || TEST_OP(INSTR_HI, IDIV, OP_DIV)
+        || TEST_OP(INSTR_HI, IIDIV, OP_IDIV)) {
         new_cursor = decode_params(context, decoded, OPV_BASE, new_cursor, params);
 
         switch (bits_432) {
@@ -1262,9 +1310,9 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
     }
 
     if (   (decoded->op_code=OP_AND_IMM2ACC,
-                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, IAND_IMM2ACC))
+                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, IAND_IMM2ACC, OP_AND_IMM2ACC))
         || (decoded->op_code=OP_AND_REGMEM2REG,
-                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IAND_REGMEM2REG))
+                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IAND_REGMEM2REG, OP_AND_REGMEM2REG))
        ) {
 #ifdef DEBUG
         printf("[AND] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
@@ -1279,9 +1327,9 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
     }
 
     if (   (decoded->op_code=OP_XOR_REGMEM2REG,
-                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IXOR_REGMEM2REG))
+                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, IXOR_REGMEM2REG, OP_XOR_REGMEM2REG))
         || (decoded->op_code=OP_XOR_IMM2ACC,
-                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, IXOR_IMM2ACC))
+                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, IXOR_IMM2ACC, OP_XOR_IMM2ACC))
        ) {
 #ifdef DEBUG
         printf("[XOR] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
@@ -1296,11 +1344,11 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
     }
 
     if (   (decoded->op_code=OP_TEST_REGMEM2REG,
-                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, ITEST_REGMEM2REG))
+                matched_variant=OPV_BASE, TEST_OP(INSTR_HI, ITEST_REGMEM2REG, OP_TEST_REGMEM2REG))
         || (decoded->op_code=OP_TEST_IMM2REGMEM,
-                matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_HI, ITEST_IMM2REGMEM))
+                matched_variant=OPV_IMM2REGMEM, TEST_OP(INSTR_HI, ITEST_IMM2REGMEM, OP_TEST_IMM2REGMEM))
         || (decoded->op_code=OP_TEST_IMM2ACC,
-                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, ITEST_IMM2ACC))
+                matched_variant=OPV_IMM2ACC, TEST_OP(INSTR_HI, ITEST_IMM2ACC, OP_TEST_IMM2ACC))
        ) {
 #ifdef DEBUG
         printf("[TEST] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
@@ -1315,11 +1363,11 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
     }
 
     if (   (decoded->op_code=OP_LOOP,
-                matched_variant=OPV_JMP, TEST_OP(INSTR_HI, ILOOP))
+                matched_variant=OPV_JMP, TEST_OP(INSTR_HI, ILOOP, OP_LOOP))
         || (decoded->op_code=OP_LOOPZ,
-                matched_variant=OPV_JMP, TEST_OP(INSTR_HI, ILOOPZ))
+                matched_variant=OPV_JMP, TEST_OP(INSTR_HI, ILOOPZ, OP_LOOPZ))
         || (decoded->op_code=OP_LOOPNZ,
-                matched_variant=OPV_JMP, TEST_OP(INSTR_HI, ILOOPNZ))
+                matched_variant=OPV_JMP, TEST_OP(INSTR_HI, ILOOPNZ, OP_LOOPNZ))
        ) {
 #ifdef DEBUG
         printf("[LOOPS] MATCHED_VARIANT: %s\n", opv_str(matched_variant));
@@ -1343,12 +1391,12 @@ u32 decode(decoder_context_t *context, instruction_t *decoded,
     }
 
     // Check for opcodes with the same value (other flags must differ)
-    if (   TEST_OP(INSTR_HI, IADD_IMM2REGMEM)
-        || TEST_OP(INSTR_HI, ISUB_IMM_FROM_REGMEM)
-        || TEST_OP(INSTR_HI, IAND_IMM2REGMEM)
-        || TEST_OP(INSTR_HI, IXOR_IMM2REGMEM)
-        || TEST_OP(INSTR_HI, IOR_IMM2REGMEM)
-        || TEST_OP(INSTR_HI, ICMP_IMM_WITH_REGMEM)) {
+    if (   TEST_OP(INSTR_HI, IADD_IMM2REGMEM, OP_OR_IMM2REGMEM)
+        || TEST_OP(INSTR_HI, ISUB_IMM_FROM_REGMEM, OP_SUB_IMM_FROM_REGMEM)
+        || TEST_OP(INSTR_HI, IAND_IMM2REGMEM, OP_AND_IMM2REGMEM)
+        || TEST_OP(INSTR_HI, IXOR_IMM2REGMEM, OP_XOR_IMM2REGMEM)
+        || TEST_OP(INSTR_HI, IOR_IMM2REGMEM, OP_OR_IMM2REGMEM)
+        || TEST_OP(INSTR_HI, ICMP_IMM_WITH_REGMEM, OP_CMP_IMM_WITH_REGMEM)) {
         new_cursor = decode_params(context, decoded, OPV_IMM2REGMEM_SOURCEBIT, new_cursor, params);
 
 #ifdef DEBUG
